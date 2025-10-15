@@ -42,13 +42,12 @@
             기본은 sRGB로 문제를 냈어. 브라우저/모니터에 따라 표시가 조금 다를
             수 있어.
           </p>
-          <details id="truthBox" class="truth" closed>
-            <summary>정답 코드 보기 (채점 후 자동 공개)</summary>
+          <div id="truthBox" class="truth" hidden>
             <div class="truth-codes">
               <div><b>Hex</b> <code id="truthHex">#000000</code></div>
               <div><b>RGB</b> <code id="truthRgb">rgb(0, 0, 0)</code></div>
             </div>
-          </details>
+          </div>
         </section>
 
         <!-- 오른쪽: 입력 + 점수 -->
@@ -87,16 +86,13 @@
               <div id="rgbdist" class="value">—</div>
             </div>
             <div class="metric span2">
-              <div class="label">채널 오차 |R−r|,|G−g|,|B−b|</div>
-              <div id="chandiff" class="value">—</div>
-            </div>
-            <div class="metric span2">
               <div class="label">해석</div>
               <div id="verdict" class="value">—</div>
             </div>
           </div>
 
           <div class="buttons">
+            <button id="previewBtn" class="btn">색상 확인</button>
             <button id="submitBtn" class="btn primary">채점</button>
             <button id="nextBtn" class="btn">다음 문제</button>
           </div>

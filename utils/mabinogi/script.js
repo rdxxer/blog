@@ -5,25 +5,33 @@ function parseColorInput(str) {
   if (!str) return null
   const s = str.trim().toLowerCase()
 
-  // #RRGGBB or #RGB
+  // ✅ 해시 없이 6자리 hex 허용 (예: "34a853")
+  if (/^[0-9a-f]{6}$/.test(s)) {
+    const r = parseInt(s.slice(0, 2), 16)
+    const g = parseInt(s.slice(2, 4), 16)
+    const b = parseInt(s.slice(4, 6), 16)
+    return [r, g, b]
+  }
+
+  // 기존 #RRGGBB / #RGB 처리
   if (s[0] === '#') {
-    const hex = s.replace('#', '')
+    const hex = s.slice(1)
     if (hex.length === 3) {
       const r = parseInt(hex[0] + hex[0], 16)
       const g = parseInt(hex[1] + hex[1], 16)
       const b = parseInt(hex[2] + hex[2], 16)
-      if ([r, g, b].some((v) => Number.isNaN(v))) return null
+      if ([r, g, b].some(Number.isNaN)) return null
       return [r, g, b]
     } else if (hex.length === 6) {
       const r = parseInt(hex.slice(0, 2), 16)
       const g = parseInt(hex.slice(2, 4), 16)
       const b = parseInt(hex.slice(4, 6), 16)
-      if ([r, g, b].some((v) => Number.isNaN(v))) return null
+      if ([r, g, b].some(Number.isNaN)) return null
       return [r, g, b]
     } else return null
   }
 
-  // rgb( r , g , b )
+  // 기존 rgb(r,g,b)
   const m = s.match(
     /^rgb\s*\(\s*([+-]?\d+)\s*,\s*([+-]?\d+)\s*,\s*([+-]?\d+)\s*\)$/i
   )
@@ -31,12 +39,13 @@ function parseColorInput(str) {
     let r = clampInt(parseInt(m[1], 10), 0, 255)
     let g = clampInt(parseInt(m[2], 10), 0, 255)
     let b = clampInt(parseInt(m[3], 10), 0, 255)
-    if ([r, g, b].some((v) => Number.isNaN(v))) return null
+    if ([r, g, b].some(Number.isNaN)) return null
     return [r, g, b]
   }
 
-  return null // unsupported form
+  return null
 }
+
 function clampInt(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v))
 }
@@ -221,8 +230,8 @@ const el = {
   de00: document.getElementById('de00'),
   de76: document.getElementById('de76'),
   rgbdist: document.getElementById('rgbdist'),
-  chandiff: document.getElementById('chandiff'),
   verdict: document.getElementById('verdict'),
+  previewBtn: document.getElementById('previewBtn'),
   submitBtn: document.getElementById('submitBtn'),
   nextBtn: document.getElementById('nextBtn'),
   history: document.getElementById('history'),
@@ -255,7 +264,7 @@ function setTargetColor(rgb) {
   // reset truth panel and metrics
   el.truthHex.textContent = toHex(targetRGB)
   el.truthRgb.textContent = toRgbStr(targetRGB)
-  el.truthBox.open = false
+  el.truthBox.hidden = true
   clearMetrics()
 }
 function updateTargetSwatch() {
@@ -272,7 +281,6 @@ function clearMetrics() {
   el.de00.textContent = '—'
   el.de76.textContent = '—'
   el.rgbdist.textContent = '—'
-  el.chandiff.textContent = '—'
   el.verdict.textContent = '—'
   el.inputStatus.textContent = ''
 }
@@ -280,33 +288,22 @@ function clearMetrics() {
 function onInputChanged() {
   const parsed = parseColorInput(el.colorInput.value)
   if (parsed) {
-    el.inputSwatch.style.backgroundColor = toRgbStr(parsed)
     el.inputStatus.textContent = ''
   } else {
-    el.inputSwatch.style.backgroundColor = '#0e1117'
     if (el.colorInput.value.trim() !== '') {
-      el.inputStatus.textContent = '형식: #RRGGBB, #RGB, 또는 rgb(r, g, b)'
+      el.inputStatus.textContent =
+        '형식: #RRGGBB, #RGB, rgb(r,g,b), 또는 6자리 hex'
     } else {
       el.inputStatus.textContent = ''
     }
   }
 }
 
-function score() {
-  const guess = parseColorInput(el.colorInput.value)
-  if (!guess) {
-    el.inputStatus.textContent = '먼저 올바른 형식으로 색상 코드를 입력해줘!'
-    return
-  }
-
-  // Lab 기반 거리
+function computeMetrics(guess) {
   const labT = rgb_to_lab(targetRGB)
   const labG = rgb_to_lab(guess)
-
   const dE00 = deltaE00(labT, labG)
   const dE76 = deltaE76(labT, labG)
-
-  // RGB 거리 (0..441.67 범위)
   const dr = targetRGB[0] - guess[0]
   const dg = targetRGB[1] - guess[1]
   const db = targetRGB[2] - guess[2]
@@ -315,24 +312,34 @@ function score() {
   el.de00.textContent = dE00.toFixed(2)
   el.de76.textContent = dE76.toFixed(1)
   el.rgbdist.textContent = dRGB.toFixed(1)
-  el.chandiff.textContent = `${Math.abs(dr)}, ${Math.abs(dg)}, ${Math.abs(db)}`
   el.verdict.textContent = verdictFromMetric(
     el.scoreMetric.value === 'de76' ? dE76 : dE00,
     el.scoreMetric.value
   )
+}
 
-  // 채점 후 정답 코드 공개
-  el.truthBox.open = true
+function score() {
+  const guess = parseColorInput(el.colorInput.value)
+  if (!guess) {
+    el.inputStatus.textContent = '먼저 올바른 형식으로 색상 코드를 입력해줘!'
+    return
+  }
+  el.inputSwatch.style.backgroundColor = toRgbStr(guess)
+  computeMetrics(guess)
+
+  // 정답 공개
+  el.truthBox.hidden = false
 
   // 기록 남기기
   pushHistory({
     truthHex: toHex(targetRGB),
     guessHex: toHex(guess),
-    de00: dE00,
-    de76: dE76,
-    dRGB: dRGB,
+    de00: parseFloat(el.de00.textContent),
+    de76: parseFloat(el.de76.textContent),
+    dRGB: parseFloat(el.rgbdist.textContent),
   })
 }
+
 function verdictFromMetric(value, metric) {
   if (metric === 'rgb') {
     // 대충 감각적 구간
@@ -371,10 +378,24 @@ function nextProblem() {
   clearMetrics()
 }
 
+function preview() {
+  const guess = parseColorInput(el.colorInput.value)
+  if (!guess) {
+    el.inputStatus.textContent = '올바른 형식으로 입력해줘!'
+    return
+  }
+  // 입력 스와치 여기서만 반영
+  el.inputSwatch.style.backgroundColor = toRgbStr(guess)
+  computeMetrics(guess)
+  // 정답 패널은 닫힌 상태 유지
+  el.truthBox.hidden = true
+}
+
 // ===== Wire up =====
 el.colorInput.addEventListener('input', onInputChanged)
 el.submitBtn.addEventListener('click', score)
 el.nextBtn.addEventListener('click', nextProblem)
+el.previewBtn.addEventListener('click', preview)
 el.renderSpace.addEventListener('change', updateTargetSwatch)
 el.scoreMetric.addEventListener('change', () => {
   /* just UI; score 다시 계산은 제출 때 */
@@ -383,7 +404,12 @@ el.scoreMetric.addEventListener('change', () => {
 // Enter 키로 채점
 el.colorInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
-    score()
+    e.preventDefault()
+    if (e.shiftKey) {
+      score() // Shift+Enter = 채점
+    } else {
+      preview() // Enter = 색상 확인
+    }
   }
 })
 
