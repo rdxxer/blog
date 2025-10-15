@@ -111,10 +111,6 @@ body {
 .truth {
   margin-top: 12px;
 }
-.truth summary {
-  cursor: pointer;
-  color: var(--accent-2);
-}
 .truth-codes {
   display: flex;
   gap: 18px;

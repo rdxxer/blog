@@ -30,7 +30,7 @@
       </header>
 
       <main class="grid">
-        <!-- 왼쪽: 타겟 색 -->
+        <!-- 왼쪽: 문제 색 -->
         <section class="panel">
           <h2>문제 색상</h2>
           <div
@@ -42,6 +42,8 @@
             기본은 sRGB로 문제를 냈어. 브라우저/모니터에 따라 표시가 조금 다를
             수 있어.
           </p>
+
+          <!-- ✅ 정답은 채점 이후에만 노출 -->
           <div id="truthBox" class="truth" hidden>
             <div class="truth-codes">
               <div><b>Hex</b> <code id="truthHex">#000000</code></div>
@@ -50,18 +52,18 @@
           </div>
         </section>
 
-        <!-- 오른쪽: 입력 + 점수 -->
+        <!-- 오른쪽: 입력/점수 -->
         <section class="panel">
           <h2>네가 생각한 색 입력</h2>
 
           <label for="colorInput" class="label"
-            >색상 코드 (#RRGGBB, #RGB, rgb(r,g,b))</label
+            >색상 코드 (#RRGGBB, #RGB, rgb(r,g,b), 또는 6자리 hex)</label
           >
           <div class="input-row">
             <input
               id="colorInput"
               class="text"
-              placeholder="#34a853 또는 rgb(52,168,83)"
+              placeholder="#34a853 / 34a853 / rgb(52,168,83)"
               autocomplete="off"
             />
             <div
@@ -106,9 +108,10 @@
 
       <footer class="footer">
         <small>
-          * 입력은 sRGB 기준으로 해석돼. Display-P3 표시는 실험적인 렌더링
-          옵션일 뿐, 문제는 sRGB 가뮤트 내부에서만 출제해. ΔE 해석(대략): 1↓
-          거의 구분 불가 · 2–3 미세한 차이 · 3–6 눈에 띔 · 6↑ 꽤 다름
+          * 입력은 sRGB 기준으로 해석돼. Display-P3 표시는 실험적 렌더 옵션일
+          뿐, 문제는 sRGB 가뮤트 내부에서만 출제해.<br />
+          ΔE 해석(대략): 1↓ 거의 구분 불가 · 2–3 미세한 차이 · 3–6 눈에 띔 · 6↑
+          꽤 다름
         </small>
       </footer>
     </div>

@@ -1,11 +1,11 @@
 // ===== Utilities: parsing & color math =====
 
-// parse "#RRGGBB" / "#RGB" / "rgb(r,g,b)"
+// parse "#RRGGBB" / "#RGB" / "rgb(r,g,b)" / "RRGGBB"
 function parseColorInput(str) {
   if (!str) return null
   const s = str.trim().toLowerCase()
 
-  // ✅ 해시 없이 6자리 hex 허용 (예: "34a853")
+  // ✅ 6자리 hex(해시 없이) 허용: "34a853"
   if (/^[0-9a-f]{6}$/.test(s)) {
     const r = parseInt(s.slice(0, 2), 16)
     const g = parseInt(s.slice(2, 4), 16)
@@ -13,7 +13,7 @@ function parseColorInput(str) {
     return [r, g, b]
   }
 
-  // 기존 #RRGGBB / #RGB 처리
+  // #RRGGBB / #RGB
   if (s[0] === '#') {
     const hex = s.slice(1)
     if (hex.length === 3) {
@@ -31,7 +31,7 @@ function parseColorInput(str) {
     } else return null
   }
 
-  // 기존 rgb(r,g,b)
+  // rgb(r,g,b)
   const m = s.match(
     /^rgb\s*\(\s*([+-]?\d+)\s*,\s*([+-]?\d+)\s*,\s*([+-]?\d+)\s*\)$/i
   )
@@ -45,7 +45,6 @@ function parseColorInput(str) {
 
   return null
 }
-
 function clampInt(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v))
 }
@@ -74,7 +73,6 @@ function srgb_to_xyz(rgb) {
   const r = srgb8_to_linear(r8),
     g = srgb8_to_linear(g8),
     b = srgb8_to_linear(b8)
-  // sRGB -> XYZ (D65), matrix from IEC 61966-2-1
   const X = 0.41239079926595 * r + 0.35758433938387 * g + 0.18048078840183 * b
   const Y = 0.21263900587151 * r + 0.71516867876775 * g + 0.07219231536073 * b
   const Z = 0.01933081871559 * r + 0.11919477979462 * g + 0.95053215224966 * b
@@ -83,7 +81,6 @@ function srgb_to_xyz(rgb) {
 
 // XYZ (D65) -> Lab (D65)
 function xyz_to_lab([X, Y, Z]) {
-  // Reference white D65
   const Xn = 0.95047,
     Yn = 1.0,
     Zn = 1.08883
@@ -96,15 +93,15 @@ function xyz_to_lab([X, Y, Z]) {
   return [L, a, b]
 }
 function f_xyz(t) {
-  const e = 216 / 24389 // ~0.008856
-  const k = 24389 / 27 // ~903.3
+  const e = 216 / 24389
+  const k = 24389 / 27
   return t > e ? Math.cbrt(t) : t * (k / 116) + 16 / 116
 }
 function rgb_to_lab(rgb) {
   return xyz_to_lab(srgb_to_xyz(rgb))
 }
 
-// ΔE76 (Lab Euclidean)
+// ΔE76
 function deltaE76(lab1, lab2) {
   const dl = lab1[0] - lab2[0],
     da = lab1[1] - lab2[1],
@@ -112,40 +109,33 @@ function deltaE76(lab1, lab2) {
   return Math.hypot(dl, da, db)
 }
 
-// ΔE2000 implementation (Sharma et al. 2005)
+// ΔE2000
 function deltaE00(lab1, lab2) {
-  const [L1, a1, b1] = lab1
-  const [L2, a2, b2] = lab2
-
+  const [L1, a1, b1] = lab1,
+    [L2, a2, b2] = lab2
   const kL = 1,
     kC = 1,
     kH = 1
-
-  const C1 = Math.hypot(a1, b1)
-  const C2 = Math.hypot(a2, b2)
+  const C1 = Math.hypot(a1, b1),
+    C2 = Math.hypot(a2, b2)
   const Cbar = (C1 + C2) / 2
-
   const G =
     0.5 *
     (1 - Math.sqrt(Math.pow(Cbar, 7) / (Math.pow(Cbar, 7) + Math.pow(25, 7))))
-  const a1p = (1 + G) * a1
-  const a2p = (1 + G) * a2
-  const C1p = Math.hypot(a1p, b1)
-  const C2p = Math.hypot(a2p, b2)
+  const a1p = (1 + G) * a1,
+    a2p = (1 + G) * a2
+  const C1p = Math.hypot(a1p, b1),
+    C2p = Math.hypot(a2p, b2)
   const Cbarp = (C1p + C2p) / 2
-
-  const h1p = hp(a1p, b1)
-  const h2p = hp(a2p, b2)
-
-  const dLp = L2 - L1
-  const dCp = C2p - C1p
-
+  const h1p = hp(a1p, b1),
+    h2p = hp(a2p, b2)
+  const dLp = L2 - L1,
+    dCp = C2p - C1p
   let dhp = h2p - h1p
   if (isNaN(h1p) || isNaN(h2p)) dhp = 0
   else if (dhp > 180) dhp -= 360
   else if (dhp < -180) dhp += 360
   const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin(deg2rad(dhp / 2))
-
   const Lbarp = (L1 + L2) / 2
   let hbarp =
     isNaN(h1p) || isNaN(h2p)
@@ -155,50 +145,40 @@ function deltaE00(lab1, lab2) {
       : Math.abs(h1p - h2p) > 180
       ? (h1p + h2p + 360) / 2
       : (h1p + h2p) / 2
-
   const T =
     1 -
     0.17 * Math.cos(deg2rad(hbarp - 30)) +
     0.24 * Math.cos(deg2rad(2 * hbarp)) +
     0.32 * Math.cos(deg2rad(3 * hbarp + 6)) -
     0.2 * Math.cos(deg2rad(4 * hbarp - 63))
-
   const Sl =
     1 +
     (0.015 * Math.pow(Lbarp - 50, 2)) / Math.sqrt(20 + Math.pow(Lbarp - 50, 2))
   const Sc = 1 + 0.045 * Cbarp
   const Sh = 1 + 0.015 * Cbarp * T
-
   const delthetarad = deg2rad(30 * Math.exp(-Math.pow((hbarp - 275) / 25, 2)))
   const Rc =
     2 * Math.sqrt(Math.pow(Cbarp, 7) / (Math.pow(Cbarp, 7) + Math.pow(25, 7)))
   const Rt = -Rc * Math.sin(delthetarad)
-
-  const dE = Math.sqrt(
+  return Math.sqrt(
     Math.pow(dLp / (kL * Sl), 2) +
       Math.pow(dCp / (kC * Sc), 2) +
       Math.pow(dHp / (kH * Sh), 2) +
       Rt * (dCp / (kC * Sc)) * (dHp / (kH * Sh))
   )
-  return dE
 }
 function hp(a, b) {
   if (a === 0 && b === 0) return NaN
-  const h = rad2deg(Math.atan2(b, a))
+  const h = (Math.atan2(b, a) * 180) / Math.PI
   return h >= 0 ? h : h + 360
 }
 function deg2rad(d) {
   return (d * Math.PI) / 180
 }
-function rad2deg(r) {
-  return (r * 180) / Math.PI
-}
 
-// Display-P3 helpers (for rendering only, 문제는 sRGB 내부에서 생성)
+// Display-P3 helpers (표시용)
 function srgb_to_displayp3_linear(rgb) {
-  // Convert sRGB -> XYZ -> Display-P3 linear RGB
   const [X, Y, Z] = srgb_to_xyz(rgb)
-  // XYZ -> Display-P3 linear
   const m = [
     [2.493496911941425, -0.9313836179191239, -0.40271078445071684],
     [-0.8294889695615747, 1.7626640603183463, 0.023624685841943577],
@@ -207,7 +187,6 @@ function srgb_to_displayp3_linear(rgb) {
   const Rp = m[0][0] * X + m[0][1] * Y + m[0][2] * Z
   const Gp = m[1][0] * X + m[1][1] * Y + m[1][2] * Z
   const Bp = m[2][0] * X + m[2][1] * Y + m[2][2] * Z
-  // clamp to 0..1 for CSS color(display-p3 ...)
   return [clamp01(Rp), clamp01(Gp), clamp01(Bp)]
 }
 function clamp01(x) {
@@ -237,12 +216,13 @@ const el = {
   history: document.getElementById('history'),
 }
 
-// detect P3 support for CSS color()
+// detect P3 support
 ;(function detectP3() {
   supportsP3 =
-    CSS && CSS.supports && CSS.supports('color', 'color(display-p3 1 0 0)')
+    typeof CSS !== 'undefined' &&
+    CSS.supports &&
+    CSS.supports('color', 'color(display-p3 1 0 0)')
   if (!supportsP3) {
-    // If not supported, lock renderSpace to sRGB
     const optP3 = [...el.renderSpace.options].find((o) => o.value === 'p3')
     if (optP3) optP3.textContent = 'Display-P3 (미지원)'
     el.renderSpace.value = 'srgb'
@@ -251,7 +231,6 @@ const el = {
 
 // ===== Game flow =====
 function randomSRGB() {
-  // 균일 무작위 sRGB
   return [rand255(), rand255(), rand255()]
 }
 function rand255() {
@@ -261,12 +240,15 @@ function rand255() {
 function setTargetColor(rgb) {
   targetRGB = rgb.slice()
   updateTargetSwatch()
-  // reset truth panel and metrics
+
+  // 정답 값 세팅(표시는 숨김 상태 유지)
   el.truthHex.textContent = toHex(targetRGB)
   el.truthRgb.textContent = toRgbStr(targetRGB)
   el.truthBox.hidden = true
+
   clearMetrics()
 }
+
 function updateTargetSwatch() {
   const mode = el.renderSpace.value
   if (mode === 'p3' && supportsP3) {
@@ -283,6 +265,7 @@ function clearMetrics() {
   el.rgbdist.textContent = '—'
   el.verdict.textContent = '—'
   el.inputStatus.textContent = ''
+  el.inputSwatch.style.backgroundColor = '#0e1117'
 }
 
 function onInputChanged() {
@@ -318,6 +301,35 @@ function computeMetrics(guess) {
   )
 }
 
+function verdictFromMetric(value, metric) {
+  if (metric === 'rgb') {
+    if (value < 20) return '거의 같다 👍'
+    if (value < 45) return '미세한 차이'
+    if (value < 90) return '눈에 띄는 차이'
+    return '꽤 다르다'
+  } else {
+    // ΔE
+    if (value < 1.0) return '거의 구분 불가 🔍'
+    if (value < 2.3) return '간신히 구분'
+    if (value < 5.0) return '눈에 띔'
+    if (value < 10.0) return '확연한 차이'
+    return '전혀 다름'
+  }
+}
+
+// ✅ 색상 확인: 스와치 갱신 + 점수 계산 (정답은 여전히 숨김)
+function preview() {
+  const guess = parseColorInput(el.colorInput.value)
+  if (!guess) {
+    el.inputStatus.textContent = '올바른 형식으로 입력해줘!'
+    return
+  }
+  el.inputSwatch.style.backgroundColor = toRgbStr(guess)
+  computeMetrics(guess)
+  el.truthBox.hidden = true // 정답 비공개 유지
+}
+
+// ✅ 채점: 스와치 갱신 + 점수 + 정답 공개 + 기록
 function score() {
   const guess = parseColorInput(el.colorInput.value)
   if (!guess) {
@@ -330,7 +342,7 @@ function score() {
   // 정답 공개
   el.truthBox.hidden = false
 
-  // 기록 남기기
+  // 기록
   pushHistory({
     truthHex: toHex(targetRGB),
     guessHex: toHex(guess),
@@ -338,23 +350,6 @@ function score() {
     de76: parseFloat(el.de76.textContent),
     dRGB: parseFloat(el.rgbdist.textContent),
   })
-}
-
-function verdictFromMetric(value, metric) {
-  if (metric === 'rgb') {
-    // 대충 감각적 구간
-    if (value < 20) return '거의 같다 👍'
-    if (value < 45) return '미세한 차이'
-    if (value < 90) return '눈에 띄는 차이'
-    return '꽤 다르다'
-  } else {
-    // ΔE 계열
-    if (value < 1.0) return '거의 구분 불가 🔍'
-    if (value < 2.3) return '간신히 구분'
-    if (value < 5.0) return '눈에 띔'
-    if (value < 10.0) return '확연한 차이'
-    return '전혀 다름'
-  }
 }
 
 function pushHistory(item) {
@@ -374,41 +369,24 @@ function pushHistory(item) {
 function nextProblem() {
   setTargetColor(randomSRGB())
   el.colorInput.value = ''
-  el.inputSwatch.style.backgroundColor = '#0e1117'
   clearMetrics()
-}
-
-function preview() {
-  const guess = parseColorInput(el.colorInput.value)
-  if (!guess) {
-    el.inputStatus.textContent = '올바른 형식으로 입력해줘!'
-    return
-  }
-  // 입력 스와치 여기서만 반영
-  el.inputSwatch.style.backgroundColor = toRgbStr(guess)
-  computeMetrics(guess)
-  // 정답 패널은 닫힌 상태 유지
-  el.truthBox.hidden = true
 }
 
 // ===== Wire up =====
 el.colorInput.addEventListener('input', onInputChanged)
+el.previewBtn.addEventListener('click', preview)
 el.submitBtn.addEventListener('click', score)
 el.nextBtn.addEventListener('click', nextProblem)
-el.previewBtn.addEventListener('click', preview)
 el.renderSpace.addEventListener('change', updateTargetSwatch)
-el.scoreMetric.addEventListener('change', () => {
-  /* just UI; score 다시 계산은 제출 때 */
-})
 
-// Enter 키로 채점
+// ✅ Enter = 색상 확인, Shift+Enter = 채점
 el.colorInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault()
     if (e.shiftKey) {
-      score() // Shift+Enter = 채점
+      score()
     } else {
-      preview() // Enter = 색상 확인
+      preview()
     }
   }
 })
