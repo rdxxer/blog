@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>한자 부수 변환기</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="app-header">
+        <h1>한자 부수 변환기</h1>
+        <p class="subtitle">
+          입력한 한자를 Unihan JSON에서 찾아 강희 부수 번호로 변환하고,
+          <span class="mono">U+2F00</span> Kangxi Radicals 블록으로 매핑해 줘.
+          아래 팔레트로 <span class="mono">CJK Radicals Supplement</span>를
+          눌러서 수동 교정도 가능.
+        </p>
+      </header>
+
+      <div id="statusMessage" class="status status-muted">
+        radicals JSON을 불러오는 중…
+      </div>
+
+      <main class="main-layout">
+        <!-- 입력 패널 -->
+        <section class="panel panel-input">
+          <h2>1. 한자 입력</h2>
+          <label for="inputText" class="field-label">
+            변환할 한자를 입력해 줘
+            <span class="hint">(예: 異世界)</span>
+          </label>
+          <textarea
+            id="inputText"
+            class="text-input han-font"
+            rows="4"
+            placeholder="예: 異世界"
+          ></textarea>
+          <div class="actions">
+            <button id="analyzeButton" type="button" class="btn-primary">
+              부수 변환 실행 (Ctrl+Enter)
+            </button>
+          </div>
+        </section>
+
+        <!-- 출력/결과 패널 -->
+        <section class="panel panel-output">
+          <h2>2. 결과</h2>
+          <label for="outputString" class="field-label">
+            부수 문자열
+            <span class="hint">(직접 수정해도 돼)</span>
+          </label>
+          <textarea
+            id="outputString"
+            class="text-output han-font"
+            rows="2"
+            placeholder="여기에 田一田 같은 결과가 나와"
+          ></textarea>
+
+          <h3 class="subheading">문자별 상세 정보 (JSON에 있는 한자만 표시)</h3>
+          <div class="table-wrapper">
+            <table id="resultTable" class="han-font">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>문자</th>
+                  <th>코드포인트</th>
+                  <th>부수 번호</th>
+                  <th>부수 글자 (수정 가능)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- JS에서 채움 -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+
+      <!-- 부수 팔레트 -->
+      <section class="panel panel-palette">
+        <h2>3. 부수 팔레트</h2>
+        <p class="hint">
+          아래 버튼을 누르면 <strong>현재 커서가 있는 입력창</strong>
+          (결과창 / 테이블의 부수 칸 / 입력창) 위치에 해당 문자가 삽입돼. 休에서
+          ⼈ 대신 ⺅ 같은 걸 쓰고 싶을 때 편하게 골라서 끼워 넣으면 돼.
+        </p>
+
+        <div class="palette han-font">
+          <div class="palette-header">
+            <div class="tabs">
+              <button
+                type="button"
+                class="tab-button active"
+                data-target="kangxiPalette"
+              >
+                Kangxi Radicals (U+2F00)
+              </button>
+              <button
+                type="button"
+                class="tab-button"
+                data-target="supplementPalette"
+              >
+                CJK Radicals Supplement (U+2E80–U+2EF3)
+              </button>
+            </div>
+            <span class="hint small">
+              버튼에 마우스 올리면 코드포인트(U+XXXX)도 보여.
+            </span>
+          </div>
+
+          <div id="kangxiPalette" class="palette-grid">
+            <!-- JS에서 채움 -->
+          </div>
+          <div id="supplementPalette" class="palette-grid hidden">
+            <!-- JS에서 채움 -->
+          </div>
+        </div>
+      </section>
+
+      <footer class="app-footer">
+        <span class="mono">unihan_radicals.json</span> 기준. JSON에 없는 문자는
+        한자가 아닌 것으로 보고 변환에서 제외해.
+      </footer>
+    </div>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
