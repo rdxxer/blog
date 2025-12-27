@@ -1,395 +1,343 @@
-// ===== Utilities: parsing & color math =====
+/* 색 맞히기 게임 (RGB/HSL)
+   변경사항:
+   - 라운드 표시 제거
+   - 제출하면 정답 값 자동 공개
+   - 제출 후에만 "다음 색상" 버튼으로 진행 가능 (자동 진행 없음)
+   - footer 제거 (HTML에서)
+*/
 
-// parse "#RRGGBB" / "#RGB" / "rgb(r,g,b)" / "RRGGBB"
-function parseColorInput(str) {
-  if (!str) return null
-  const s = str.trim().toLowerCase()
+console.log('[ColorGame] script loaded')
 
-  // ✅ 6자리 hex(해시 없이) 허용: "34a853"
-  if (/^[0-9a-f]{6}$/.test(s)) {
-    const r = parseInt(s.slice(0, 2), 16)
-    const g = parseInt(s.slice(2, 4), 16)
-    const b = parseInt(s.slice(4, 6), 16)
-    return [r, g, b]
-  }
+const $ = (sel) => document.querySelector(sel)
 
-  // #RRGGBB / #RGB
-  if (s[0] === '#') {
-    const hex = s.slice(1)
-    if (hex.length === 3) {
-      const r = parseInt(hex[0] + hex[0], 16)
-      const g = parseInt(hex[1] + hex[1], 16)
-      const b = parseInt(hex[2] + hex[2], 16)
-      if ([r, g, b].some(Number.isNaN)) return null
-      return [r, g, b]
-    } else if (hex.length === 6) {
-      const r = parseInt(hex.slice(0, 2), 16)
-      const g = parseInt(hex.slice(2, 4), 16)
-      const b = parseInt(hex.slice(4, 6), 16)
-      if ([r, g, b].some(Number.isNaN)) return null
-      return [r, g, b]
-    } else return null
-  }
+const els = {
+  targetSwatch: $('#targetSwatch'),
+  guessSwatch: $('#guessSwatch'),
+  targetHint: $('#targetHint'),
+  guessHint: $('#guessHint'),
+  resultBox: $('#resultBox'),
 
-  // rgb(r,g,b)
-  const m = s.match(
-    /^rgb\s*\(\s*([+-]?\d+)\s*,\s*([+-]?\d+)\s*,\s*([+-]?\d+)\s*\)$/i
-  )
-  if (m) {
-    let r = clampInt(parseInt(m[1], 10), 0, 255)
-    let g = clampInt(parseInt(m[2], 10), 0, 255)
-    let b = clampInt(parseInt(m[3], 10), 0, 255)
-    if ([r, g, b].some(Number.isNaN)) return null
-    return [r, g, b]
-  }
+  rgbInputs: $('#rgbInputs'),
+  hslInputs: $('#hslInputs'),
+  modePill: $('#modePill'),
 
-  return null
+  form: $('#guessForm'),
+  nextBtn: $('#nextBtn'),
+
+  r: $('#r'),
+  g: $('#g'),
+  b: $('#b'),
+  h: $('#h'),
+  s: $('#s'),
+  l: $('#l'),
+
+  bestScore: $('#bestScore'),
+  avgScore: $('#avgScore'),
+  lastDE: $('#lastDE'),
+  tries: $('#tries'),
 }
-function clampInt(v, lo, hi) {
+
+const state = {
+  mode: 'rgb',
+  targetRGB: { r: 0, g: 0, b: 0 },
+  scores: [],
+  submitted: false,
+}
+
+function clamp(x, lo, hi) {
+  const v = Number.isFinite(x) ? x : lo
   return Math.min(hi, Math.max(lo, v))
 }
-function toHex([r, g, b]) {
-  const h = (x) => x.toString(16).padStart(2, '0')
-  return `#${h(r)}${h(g)}${h(b)}`
-}
-function toRgbStr([r, g, b]) {
-  return `rgb(${r}, ${g}, ${b})`
+
+function rgbToCss({ r, g, b }) {
+  return `rgb(${clamp(Math.round(r), 0, 255)}, ${clamp(
+    Math.round(g),
+    0,
+    255
+  )}, ${clamp(Math.round(b), 0, 255)})`
 }
 
-// sRGB 8-bit -> linear (0..1)
-function srgb8_to_linear(v) {
-  const x = v / 255
-  return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)
-}
-// linear (0..1) -> sRGB 8-bit
-function linear_to_srgb8(x) {
-  const y = x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055
-  return clampInt(Math.round(y * 255), 0, 255)
+function randomRGB() {
+  const r = Math.floor(Math.random() * 256)
+  const g = Math.floor(Math.random() * 256)
+  const b = Math.floor(Math.random() * 256)
+  return { r, g, b }
 }
 
-// sRGB (8-bit) -> XYZ (D65)
-function srgb_to_xyz(rgb) {
-  const [r8, g8, b8] = rgb
-  const r = srgb8_to_linear(r8),
-    g = srgb8_to_linear(g8),
-    b = srgb8_to_linear(b8)
-  const X = 0.41239079926595 * r + 0.35758433938387 * g + 0.18048078840183 * b
-  const Y = 0.21263900587151 * r + 0.71516867876775 * g + 0.07219231536073 * b
-  const Z = 0.01933081871559 * r + 0.11919477979462 * g + 0.95053215224966 * b
-  return [X, Y, Z]
+/* -----------------------------
+   HSL <-> RGB
+----------------------------- */
+function hslToRgb(h, s, l) {
+  h = ((h % 360) + 360) % 360
+  s = clamp(s, 0, 100) / 100
+  l = clamp(l, 0, 100) / 100
+
+  const c = (1 - Math.abs(2 * l - 1)) * s
+  const hp = h / 60
+  const x = c * (1 - Math.abs((hp % 2) - 1))
+
+  let r1 = 0,
+    g1 = 0,
+    b1 = 0
+  if (0 <= hp && hp < 1) [r1, g1, b1] = [c, x, 0]
+  else if (1 <= hp && hp < 2) [r1, g1, b1] = [x, c, 0]
+  else if (2 <= hp && hp < 3) [r1, g1, b1] = [0, c, x]
+  else if (3 <= hp && hp < 4) [r1, g1, b1] = [0, x, c]
+  else if (4 <= hp && hp < 5) [r1, g1, b1] = [x, 0, c]
+  else [r1, g1, b1] = [c, 0, x]
+
+  const m = l - c / 2
+  return {
+    r: Math.round((r1 + m) * 255),
+    g: Math.round((g1 + m) * 255),
+    b: Math.round((b1 + m) * 255),
+  }
 }
 
-// XYZ (D65) -> Lab (D65)
-function xyz_to_lab([X, Y, Z]) {
-  const Xn = 0.95047,
-    Yn = 1.0,
-    Zn = 1.08883
-  const fx = f_xyz(X / Xn),
-    fy = f_xyz(Y / Yn),
-    fz = f_xyz(Z / Zn)
+function rgbToHsl(r, g, b) {
+  r = clamp(r, 0, 255) / 255
+  g = clamp(g, 0, 255) / 255
+  b = clamp(b, 0, 255) / 255
+
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const d = max - min
+
+  let h = 0
+  if (d === 0) h = 0
+  else if (max === r) h = ((g - b) / d) % 6
+  else if (max === g) h = (b - r) / d + 2
+  else h = (r - g) / d + 4
+
+  h = Math.round((h * 60 + 360) % 360)
+
+  const l = (max + min) / 2
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1))
+
+  return { h, s: Math.round(s * 100), l: Math.round(l * 100) }
+}
+
+/* -----------------------------
+   ΔE (Lab) 계산용 변환
+----------------------------- */
+function srgbToLinear(c) {
+  c = clamp(c, 0, 255) / 255
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+}
+
+function rgbToXyz({ r, g, b }) {
+  const R = srgbToLinear(r)
+  const G = srgbToLinear(g)
+  const B = srgbToLinear(b)
+
+  const X = R * 0.4124564 + G * 0.3575761 + B * 0.1804375
+  const Y = R * 0.2126729 + G * 0.7151522 + B * 0.072175
+  const Z = R * 0.0193339 + G * 0.119192 + B * 0.9503041
+
+  return { X, Y, Z }
+}
+
+function fLab(t) {
+  const delta = 6 / 29
+  return t > Math.pow(delta, 3)
+    ? Math.cbrt(t)
+    : t / (3 * Math.pow(delta, 2)) + 4 / 29
+}
+
+function xyzToLab({ X, Y, Z }) {
+  const Xn = 0.95047
+  const Yn = 1.0
+  const Zn = 1.08883
+
+  const fx = fLab(X / Xn)
+  const fy = fLab(Y / Yn)
+  const fz = fLab(Z / Zn)
+
   const L = 116 * fy - 16
   const a = 500 * (fx - fy)
   const b = 200 * (fy - fz)
-  return [L, a, b]
-}
-function f_xyz(t) {
-  const e = 216 / 24389
-  const k = 24389 / 27
-  return t > e ? Math.cbrt(t) : t * (k / 116) + 16 / 116
-}
-function rgb_to_lab(rgb) {
-  return xyz_to_lab(srgb_to_xyz(rgb))
+
+  return { L, a, b }
 }
 
-// ΔE76
-function deltaE76(lab1, lab2) {
-  const dl = lab1[0] - lab2[0],
-    da = lab1[1] - lab2[1],
-    db = lab1[2] - lab2[2]
-  return Math.hypot(dl, da, db)
+function deltaE76(rgb1, rgb2) {
+  const lab1 = xyzToLab(rgbToXyz(rgb1))
+  const lab2 = xyzToLab(rgbToXyz(rgb2))
+  const dL = lab1.L - lab2.L
+  const da = lab1.a - lab2.a
+  const db = lab1.b - lab2.b
+  return Math.sqrt(dL * dL + da * da + db * db)
 }
 
-// ΔE2000
-function deltaE00(lab1, lab2) {
-  const [L1, a1, b1] = lab1,
-    [L2, a2, b2] = lab2
-  const kL = 1,
-    kC = 1,
-    kH = 1
-  const C1 = Math.hypot(a1, b1),
-    C2 = Math.hypot(a2, b2)
-  const Cbar = (C1 + C2) / 2
-  const G =
-    0.5 *
-    (1 - Math.sqrt(Math.pow(Cbar, 7) / (Math.pow(Cbar, 7) + Math.pow(25, 7))))
-  const a1p = (1 + G) * a1,
-    a2p = (1 + G) * a2
-  const C1p = Math.hypot(a1p, b1),
-    C2p = Math.hypot(a2p, b2)
-  const Cbarp = (C1p + C2p) / 2
-  const h1p = hp(a1p, b1),
-    h2p = hp(a2p, b2)
-  const dLp = L2 - L1,
-    dCp = C2p - C1p
-  let dhp = h2p - h1p
-  if (isNaN(h1p) || isNaN(h2p)) dhp = 0
-  else if (dhp > 180) dhp -= 360
-  else if (dhp < -180) dhp += 360
-  const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin(deg2rad(dhp / 2))
-  const Lbarp = (L1 + L2) / 2
-  let hbarp =
-    isNaN(h1p) || isNaN(h2p)
-      ? isNaN(h1p)
-        ? h2p
-        : h1p
-      : Math.abs(h1p - h2p) > 180
-      ? (h1p + h2p + 360) / 2
-      : (h1p + h2p) / 2
-  const T =
-    1 -
-    0.17 * Math.cos(deg2rad(hbarp - 30)) +
-    0.24 * Math.cos(deg2rad(2 * hbarp)) +
-    0.32 * Math.cos(deg2rad(3 * hbarp + 6)) -
-    0.2 * Math.cos(deg2rad(4 * hbarp - 63))
-  const Sl =
-    1 +
-    (0.015 * Math.pow(Lbarp - 50, 2)) / Math.sqrt(20 + Math.pow(Lbarp - 50, 2))
-  const Sc = 1 + 0.045 * Cbarp
-  const Sh = 1 + 0.015 * Cbarp * T
-  const delthetarad = deg2rad(30 * Math.exp(-Math.pow((hbarp - 275) / 25, 2)))
-  const Rc =
-    2 * Math.sqrt(Math.pow(Cbarp, 7) / (Math.pow(Cbarp, 7) + Math.pow(25, 7)))
-  const Rt = -Rc * Math.sin(delthetarad)
-  return Math.sqrt(
-    Math.pow(dLp / (kL * Sl), 2) +
-      Math.pow(dCp / (kC * Sc), 2) +
-      Math.pow(dHp / (kH * Sh), 2) +
-      Rt * (dCp / (kC * Sc)) * (dHp / (kH * Sh))
-  )
-}
-function hp(a, b) {
-  if (a === 0 && b === 0) return NaN
-  const h = (Math.atan2(b, a) * 180) / Math.PI
-  return h >= 0 ? h : h + 360
-}
-function deg2rad(d) {
-  return (d * Math.PI) / 180
+function rgbDistance(rgb1, rgb2) {
+  const dr = rgb1.r - rgb2.r
+  const dg = rgb1.g - rgb2.g
+  const db = rgb1.b - rgb2.b
+  return Math.sqrt(dr * dr + dg * dg + db * db)
 }
 
-// Display-P3 helpers (표시용)
-function srgb_to_displayp3_linear(rgb) {
-  const [X, Y, Z] = srgb_to_xyz(rgb)
-  const m = [
-    [2.493496911941425, -0.9313836179191239, -0.40271078445071684],
-    [-0.8294889695615747, 1.7626640603183463, 0.023624685841943577],
-    [0.03584583024378447, -0.07617238926804182, 0.9568845240076872],
-  ]
-  const Rp = m[0][0] * X + m[0][1] * Y + m[0][2] * Z
-  const Gp = m[1][0] * X + m[1][1] * Y + m[1][2] * Z
-  const Bp = m[2][0] * X + m[2][1] * Y + m[2][2] * Z
-  return [clamp01(Rp), clamp01(Gp), clamp01(Bp)]
-}
-function clamp01(x) {
-  return Math.min(1, Math.max(0, x))
+function scoreFromDeltaE(de) {
+  return clamp(100 - de, 0, 100)
 }
 
-// ===== State =====
-let targetRGB = [0, 0, 0] // sRGB 8-bit
-let supportsP3 = false
-const el = {
-  targetSwatch: document.getElementById('targetSwatch'),
-  truthBox: document.getElementById('truthBox'),
-  truthHex: document.getElementById('truthHex'),
-  truthRgb: document.getElementById('truthRgb'),
-  renderSpace: document.getElementById('renderSpace'),
-  scoreMetric: document.getElementById('scoreMetric'),
-  colorInput: document.getElementById('colorInput'),
-  inputSwatch: document.getElementById('inputSwatch'),
-  inputStatus: document.getElementById('inputStatus'),
-  de00: document.getElementById('de00'),
-  de76: document.getElementById('de76'),
-  rgbdist: document.getElementById('rgbdist'),
-  verdict: document.getElementById('verdict'),
-  previewBtn: document.getElementById('previewBtn'),
-  submitBtn: document.getElementById('submitBtn'),
-  nextBtn: document.getElementById('nextBtn'),
-  history: document.getElementById('history'),
-}
+/* -----------------------------
+   UI + 게임 로직
+----------------------------- */
+function setMode(mode) {
+  state.mode = mode
+  console.log('[ColorGame] setMode:', mode)
 
-// detect P3 support
-;(function detectP3() {
-  supportsP3 =
-    typeof CSS !== 'undefined' &&
-    CSS.supports &&
-    CSS.supports('color', 'color(display-p3 1 0 0)')
-  if (!supportsP3) {
-    const optP3 = [...el.renderSpace.options].find((o) => o.value === 'p3')
-    if (optP3) optP3.textContent = 'Display-P3 (미지원)'
-    el.renderSpace.value = 'srgb'
-  }
-})()
-
-// ===== Game flow =====
-function randomSRGB() {
-  return [rand255(), rand255(), rand255()]
-}
-function rand255() {
-  return Math.floor(Math.random() * 256)
-}
-
-function setTargetColor(rgb) {
-  targetRGB = rgb.slice()
-  updateTargetSwatch()
-
-  // 정답 값 세팅(표시는 숨김 상태 유지)
-  el.truthHex.textContent = toHex(targetRGB)
-  el.truthRgb.textContent = toRgbStr(targetRGB)
-  el.truthBox.hidden = true
-
-  clearMetrics()
-}
-
-function updateTargetSwatch() {
-  const mode = el.renderSpace.value
-  if (mode === 'p3' && supportsP3) {
-    const [Rp, Gp, Bp] = srgb_to_displayp3_linear(targetRGB)
-    el.targetSwatch.style.backgroundColor = `color(display-p3 ${Rp} ${Gp} ${Bp})`
+  els.modePill.textContent = mode.toUpperCase()
+  if (mode === 'rgb') {
+    els.rgbInputs.classList.remove('hidden')
+    els.hslInputs.classList.add('hidden')
   } else {
-    el.targetSwatch.style.backgroundColor = toRgbStr(targetRGB)
+    els.hslInputs.classList.remove('hidden')
+    els.rgbInputs.classList.add('hidden')
   }
+
+  updateGuessPreview()
 }
 
-function clearMetrics() {
-  el.de00.textContent = '—'
-  el.de76.textContent = '—'
-  el.rgbdist.textContent = '—'
-  el.verdict.textContent = '—'
-  el.inputStatus.textContent = ''
-  el.inputSwatch.style.backgroundColor = '#0e1117'
+function newProblem() {
+  state.targetRGB = randomRGB()
+  state.submitted = false
+
+  console.log('[ColorGame] newProblem targetRGB=', state.targetRGB)
+
+  els.targetSwatch.style.background = rgbToCss(state.targetRGB)
+  els.targetHint.textContent = '제출하면 정답 RGB/HSL 값이 여기 뜸'
+  els.resultBox.textContent =
+    '값을 입력하고 제출해봐. (제출 후에만 다음 색상 가능)'
+
+  els.nextBtn.disabled = true
+  updateGuessPreview()
 }
 
-function onInputChanged() {
-  const parsed = parseColorInput(el.colorInput.value)
-  if (parsed) {
-    el.inputStatus.textContent = ''
-  } else {
-    if (el.colorInput.value.trim() !== '') {
-      el.inputStatus.textContent =
-        '형식: #RRGGBB, #RGB, rgb(r,g,b), 또는 6자리 hex'
-    } else {
-      el.inputStatus.textContent = ''
-    }
+function readGuessAsRGB() {
+  if (state.mode === 'rgb') {
+    const r = clamp(parseFloat(els.r.value), 0, 255)
+    const g = clamp(parseFloat(els.g.value), 0, 255)
+    const b = clamp(parseFloat(els.b.value), 0, 255)
+    return { r, g, b }
   }
+
+  const h = clamp(parseFloat(els.h.value), 0, 360)
+  const s = clamp(parseFloat(els.s.value), 0, 100)
+  const l = clamp(parseFloat(els.l.value), 0, 100)
+  return hslToRgb(h, s, l)
 }
 
-function computeMetrics(guess) {
-  const labT = rgb_to_lab(targetRGB)
-  const labG = rgb_to_lab(guess)
-  const dE00 = deltaE00(labT, labG)
-  const dE76 = deltaE76(labT, labG)
-  const dr = targetRGB[0] - guess[0]
-  const dg = targetRGB[1] - guess[1]
-  const db = targetRGB[2] - guess[2]
-  const dRGB = Math.hypot(dr, dg, db)
+function updateGuessPreview() {
+  const guess = readGuessAsRGB()
+  els.guessSwatch.style.background = rgbToCss(guess)
 
-  el.de00.textContent = dE00.toFixed(2)
-  el.de76.textContent = dE76.toFixed(1)
-  el.rgbdist.textContent = dRGB.toFixed(1)
-  el.verdict.textContent = verdictFromMetric(
-    el.scoreMetric.value === 'de76' ? dE76 : dE00,
-    el.scoreMetric.value
-  )
+  const asHsl = rgbToHsl(guess.r, guess.g, guess.b)
+  els.guessHint.textContent =
+    `미리보기 RGB(${Math.round(guess.r)}, ${Math.round(guess.g)}, ${Math.round(
+      guess.b
+    )}) / ` + `HSL(${asHsl.h}, ${asHsl.s}%, ${asHsl.l}%)`
+
+  console.log('[ColorGame] preview guessRGB=', guess, 'guessHSL=', asHsl)
 }
 
-function verdictFromMetric(value, metric) {
-  if (metric === 'rgb') {
-    if (value < 20) return '거의 같다 👍'
-    if (value < 45) return '미세한 차이'
-    if (value < 90) return '눈에 띄는 차이'
-    return '꽤 다르다'
-  } else {
-    // ΔE
-    if (value < 1.0) return '거의 구분 불가 🔍'
-    if (value < 2.3) return '간신히 구분'
-    if (value < 5.0) return '눈에 띔'
-    if (value < 10.0) return '확연한 차이'
-    return '전혀 다름'
-  }
+function updateStats(de, score) {
+  state.scores.push(score)
+  const best = Math.max(...state.scores)
+  const avg = state.scores.reduce((a, b) => a + b, 0) / state.scores.length
+
+  els.bestScore.textContent = best.toFixed(1)
+  els.avgScore.textContent = avg.toFixed(1)
+  els.lastDE.textContent = de.toFixed(2)
+  els.tries.textContent = String(state.scores.length)
 }
 
-// ✅ 색상 확인: 스와치 갱신 + 점수 계산 (정답은 여전히 숨김)
-function preview() {
-  const guess = parseColorInput(el.colorInput.value)
-  if (!guess) {
-    el.inputStatus.textContent = '올바른 형식으로 입력해줘!'
+function submitGuess() {
+  if (state.submitted) {
+    console.log('[ColorGame] submit ignored (already submitted)')
     return
   }
-  el.inputSwatch.style.backgroundColor = toRgbStr(guess)
-  computeMetrics(guess)
-  el.truthBox.hidden = true // 정답 비공개 유지
-}
 
-// ✅ 채점: 스와치 갱신 + 점수 + 정답 공개 + 기록
-function score() {
-  const guess = parseColorInput(el.colorInput.value)
-  if (!guess) {
-    el.inputStatus.textContent = '먼저 올바른 형식으로 색상 코드를 입력해줘!'
-    return
-  }
-  el.inputSwatch.style.backgroundColor = toRgbStr(guess)
-  computeMetrics(guess)
+  const guessRGB = readGuessAsRGB()
+  const target = state.targetRGB
 
-  // 정답 공개
-  el.truthBox.hidden = false
+  const de = deltaE76(guessRGB, target)
+  const dist = rgbDistance(guessRGB, target)
+  const score = scoreFromDeltaE(de)
 
-  // 기록
-  pushHistory({
-    truthHex: toHex(targetRGB),
-    guessHex: toHex(guess),
-    de00: parseFloat(el.de00.textContent),
-    de76: parseFloat(el.de76.textContent),
-    dRGB: parseFloat(el.rgbdist.textContent),
+  const dr = Math.round(guessRGB.r - target.r)
+  const dg = Math.round(guessRGB.g - target.g)
+  const db = Math.round(guessRGB.b - target.b)
+
+  const targetHsl = rgbToHsl(target.r, target.g, target.b)
+
+  console.log('[ColorGame] submit:', {
+    guessRGB,
+    target,
+    de,
+    dist,
+    score,
+    dr,
+    dg,
+    db,
+    targetHsl,
   })
-}
 
-function pushHistory(item) {
-  const div = document.createElement('div')
-  div.className = 'history-item'
-  div.innerHTML = `
-    <div><b>정답</b> <code>${item.truthHex}</code> · <b>내 입력</b> <code>${
-    item.guessHex
-  }</code></div>
-    <div>ΔE2000 <b>${item.de00.toFixed(2)}</b> · ΔE76 ${item.de76.toFixed(
-    1
-  )} · RGB 거리 ${item.dRGB.toFixed(1)}</div>
-  `
-  el.history.prepend(div)
+  // 제출하면 정답 값 바로 공개
+  els.targetHint.textContent =
+    `정답 RGB(${target.r}, ${target.g}, ${target.b}) / ` +
+    `HSL(${targetHsl.h}, ${targetHsl.s}%, ${targetHsl.l}%)`
+
+  els.resultBox.innerHTML =
+    `<div class="line"><b>점수:</b> ${score.toFixed(1)} / 100</div>` +
+    `<div class="line"><b>ΔE(1976):</b> ${de.toFixed(
+      2
+    )} (작을수록 더 비슷)</div>` +
+    `<div class="line"><b>RGB 거리:</b> ${dist.toFixed(2)}</div>` +
+    `<div class="line"><b>채널 차이(내값-정답):</b> R ${
+      dr >= 0 ? '+' : ''
+    }${dr}, ` +
+    `G ${dg >= 0 ? '+' : ''}${dg}, B ${db >= 0 ? '+' : ''}${db}</div>` +
+    `<div class="line" style="margin-top:6px; color: rgba(233,236,255,.75);">` +
+    `이제 <b>다음 색상</b> 눌러서 넘어가면 돼.</div>`
+
+  updateStats(de, score)
+
+  state.submitted = true
+  els.nextBtn.disabled = false
 }
 
 function nextProblem() {
-  setTargetColor(randomSRGB())
-  el.colorInput.value = ''
-  clearMetrics()
+  if (!state.submitted) {
+    console.log('[ColorGame] next blocked (not submitted yet)')
+    els.resultBox.textContent = '먼저 제출해야 다음 색상으로 넘어갈 수 있어.'
+    return
+  }
+  console.log('[ColorGame] nextProblem')
+  newProblem()
 }
 
-// ===== Wire up =====
-el.colorInput.addEventListener('input', onInputChanged)
-el.previewBtn.addEventListener('click', preview)
-el.submitBtn.addEventListener('click', score)
-el.nextBtn.addEventListener('click', nextProblem)
-el.renderSpace.addEventListener('change', updateTargetSwatch)
-
-// ✅ Enter = 색상 확인, Shift+Enter = 채점
-el.colorInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault()
-    if (e.shiftKey) {
-      score()
-    } else {
-      preview()
-    }
-  }
+/* -----------------------------
+   이벤트 연결
+----------------------------- */
+document.querySelectorAll("input[name='mode']").forEach((radio) => {
+  radio.addEventListener('change', (e) => setMode(e.target.value))
 })
 
-// init
-nextProblem()
+;['r', 'g', 'b', 'h', 's', 'l'].forEach((id) => {
+  const el = $('#' + id)
+  el.addEventListener('input', updateGuessPreview)
+})
+
+els.form.addEventListener('submit', (e) => {
+  e.preventDefault()
+  submitGuess()
+})
+
+els.nextBtn.addEventListener('click', () => {
+  nextProblem()
+})
+
+/* 초기화 */
+setMode('rgb')
+newProblem()

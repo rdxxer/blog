@@ -2,120 +2,169 @@
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>색상 맞히기 — sRGB ΔE 게임</title>
-    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>색 맞히기 (RGB/HSL)</title>
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div class="wrap">
-      <header class="topbar">
-        <h1>색상 맞히기</h1>
-        <div class="controls-inline">
-          <label class="control">
-            <span>표시 색공간</span>
-            <select id="renderSpace">
-              <option value="srgb" selected>sRGB (기본)</option>
-              <option value="p3">Display-P3 (실험적)</option>
-            </select>
-          </label>
-          <label class="control">
-            <span>점수 지표</span>
-            <select id="scoreMetric">
-              <option value="de00" selected>ΔE2000</option>
-              <option value="de76">ΔE76</option>
-              <option value="rgb">RGB 유클리드</option>
-            </select>
-          </label>
-        </div>
+    <div class="app">
+      <header class="header">
+        <h1>색 맞히기 🎯</h1>
+        <p class="sub">
+          왼쪽(정답 색)을 보고 숫자로 최대한 비슷하게 맞혀봐. 제출하면 차이랑
+          정답 값이 바로 뜨고,
+          <b>다음 색상</b>을 눌러야 다음 문제로 넘어가.
+        </p>
       </header>
 
-      <main class="grid">
-        <!-- 왼쪽: 문제 색 -->
-        <section class="panel">
-          <h2>문제 색상</h2>
-          <div
-            id="targetSwatch"
-            class="swatch large"
-            aria-label="문제 색상 미리보기"
-          ></div>
-          <p class="hint">
-            기본은 sRGB로 문제를 냈어. 브라우저/모니터에 따라 표시가 조금 다를
-            수 있어.
-          </p>
-
-          <!-- ✅ 정답은 채점 이후에만 노출 -->
-          <div id="truthBox" class="truth" hidden>
-            <div class="truth-codes">
-              <div><b>Hex</b> <code id="truthHex">#000000</code></div>
-              <div><b>RGB</b> <code id="truthRgb">rgb(0, 0, 0)</code></div>
+      <section class="panel">
+        <div class="swatches">
+          <div class="swatchCard">
+            <div class="labelRow">
+              <span class="label">정답</span>
+            </div>
+            <div class="swatch" id="targetSwatch" aria-label="정답 색상"></div>
+            <div class="hint" id="targetHint">
+              제출하면 정답 RGB/HSL 값이 여기 뜸
             </div>
           </div>
-        </section>
 
-        <!-- 오른쪽: 입력/점수 -->
-        <section class="panel">
-          <h2>네가 생각한 색 입력</h2>
-
-          <label for="colorInput" class="label"
-            >색상 코드 (#RRGGBB, #RGB, rgb(r,g,b), 또는 6자리 hex)</label
-          >
-          <div class="input-row">
-            <input
-              id="colorInput"
-              class="text"
-              placeholder="#34a853 / 34a853 / rgb(52,168,83)"
-              autocomplete="off"
-            />
+          <div class="swatchCard">
+            <div class="labelRow">
+              <span class="label">내 입력 미리보기</span>
+              <span class="pill subtle" id="modePill">RGB</span>
+            </div>
             <div
-              id="inputSwatch"
-              class="swatch small"
-              title="입력 미리보기"
+              class="swatch"
+              id="guessSwatch"
+              aria-label="내 색상 미리보기"
             ></div>
+            <div class="hint" id="guessHint">값을 입력하면 여기 색이 바뀜</div>
           </div>
-          <p id="inputStatus" class="status" aria-live="polite"></p>
+        </div>
 
-          <div class="metrics">
-            <div class="metric">
-              <div class="label">ΔE2000</div>
-              <div id="de00" class="value">—</div>
-            </div>
-            <div class="metric">
-              <div class="label">ΔE76</div>
-              <div id="de76" class="value">—</div>
-            </div>
-            <div class="metric">
-              <div class="label">RGB 거리</div>
-              <div id="rgbdist" class="value">—</div>
-            </div>
-            <div class="metric span2">
-              <div class="label">해석</div>
-              <div id="verdict" class="value">—</div>
-            </div>
+        <div class="controls">
+          <div class="modeRow">
+            <span class="label">입력 방식</span>
+            <label class="radio">
+              <input type="radio" name="mode" value="rgb" checked />
+              <span>RGB</span>
+            </label>
+            <label class="radio">
+              <input type="radio" name="mode" value="hsl" />
+              <span>HSL</span>
+            </label>
           </div>
 
-          <div class="buttons">
-            <button id="previewBtn" class="btn">색상 확인</button>
-            <button id="submitBtn" class="btn primary">채점</button>
-            <button id="nextBtn" class="btn">다음 문제</button>
+          <form id="guessForm" class="form">
+            <!-- RGB inputs -->
+            <div class="grid" id="rgbInputs">
+              <div class="field">
+                <label for="r">R (0~255)</label>
+                <input
+                  id="r"
+                  type="number"
+                  min="0"
+                  max="255"
+                  step="1"
+                  value="128"
+                />
+              </div>
+              <div class="field">
+                <label for="g">G (0~255)</label>
+                <input
+                  id="g"
+                  type="number"
+                  min="0"
+                  max="255"
+                  step="1"
+                  value="128"
+                />
+              </div>
+              <div class="field">
+                <label for="b">B (0~255)</label>
+                <input
+                  id="b"
+                  type="number"
+                  min="0"
+                  max="255"
+                  step="1"
+                  value="128"
+                />
+              </div>
+            </div>
+
+            <!-- HSL inputs -->
+            <div class="grid hidden" id="hslInputs">
+              <div class="field">
+                <label for="h">H (0~360)</label>
+                <input
+                  id="h"
+                  type="number"
+                  min="0"
+                  max="360"
+                  step="1"
+                  value="180"
+                />
+              </div>
+              <div class="field">
+                <label for="s">S (0~100)</label>
+                <input
+                  id="s"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="50"
+                />
+              </div>
+              <div class="field">
+                <label for="l">L (0~100)</label>
+                <input
+                  id="l"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="50"
+                />
+              </div>
+            </div>
+
+            <div class="btnRow">
+              <button type="submit" class="btn primary">제출</button>
+              <button type="button" id="nextBtn" class="btn" disabled>
+                다음 색상
+              </button>
+            </div>
+          </form>
+
+          <div class="result" id="resultBox" role="status" aria-live="polite">
+            아직 제출 전이야.
           </div>
 
-          <details class="history" id="historyBox">
-            <summary>기록 보기</summary>
-            <div id="history"></div>
-          </details>
-        </section>
-      </main>
-
-      <footer class="footer">
-        <small>
-          * 입력은 sRGB 기준으로 해석돼. Display-P3 표시는 실험적 렌더 옵션일
-          뿐, 문제는 sRGB 가뮤트 내부에서만 출제해.<br />
-          ΔE 해석(대략): 1↓ 거의 구분 불가 · 2–3 미세한 차이 · 3–6 눈에 띔 · 6↑
-          꽤 다름
-        </small>
-      </footer>
+          <div class="stats" id="statsBox">
+            <div class="stat">
+              <div class="k">최고 점수</div>
+              <div class="v" id="bestScore">-</div>
+            </div>
+            <div class="stat">
+              <div class="k">평균 점수</div>
+              <div class="v" id="avgScore">-</div>
+            </div>
+            <div class="stat">
+              <div class="k">최근 ΔE</div>
+              <div class="v" id="lastDE">-</div>
+            </div>
+            <div class="stat">
+              <div class="k">시도 횟수</div>
+              <div class="v" id="tries">0</div>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
 
-    <script src="script.js" defer></script>
+    <script src="script.js"></script>
   </body>
 </html>
