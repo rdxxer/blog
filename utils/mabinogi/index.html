@@ -3,166 +3,248 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>색 맞히기 (RGB/HSL)</title>
+    <title>색 맞히기 멀티플레이 (RGB/HSL)</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div class="app">
       <header class="header">
-        <h1>색 맞히기 🎯</h1>
-        <p class="sub">
-          왼쪽(정답 색)을 보고 숫자로 최대한 비슷하게 맞혀봐. 제출하면 차이랑
-          정답 값이 바로 뜨고,
-          <b>다음 색상</b>을 눌러야 다음 문제로 넘어가.
-        </p>
+        <h1>색 맞히기 🎯 (멀티플레이)</h1>
+        <p class="sub">설정 → 사람별 1턴 → 순위</p>
       </header>
 
-      <section class="panel">
-        <div class="swatches">
-          <div class="swatchCard">
-            <div class="labelRow">
-              <span class="label">정답</span>
+      <!-- SETUP VIEW -->
+      <section id="viewSetup" class="view">
+        <div class="card">
+          <h2>게임 설정</h2>
+
+          <div class="grid2">
+            <div class="field">
+              <label for="numPlayers">참여 인원</label>
+              <input
+                id="numPlayers"
+                type="number"
+                min="1"
+                max="50"
+                step="1"
+                value="5"
+              />
             </div>
-            <div class="swatch" id="targetSwatch" aria-label="정답 색상"></div>
-            <div class="hint" id="targetHint">
-              제출하면 정답 RGB/HSL 값이 여기 뜸
+
+            <div class="field">
+              <label for="timeLimit">제한 시간(초)</label>
+              <input
+                id="timeLimit"
+                type="number"
+                min="3"
+                max="300"
+                step="1"
+                value="25"
+              />
             </div>
           </div>
 
-          <div class="swatchCard">
-            <div class="labelRow">
-              <span class="label">내 입력 미리보기</span>
-              <span class="pill subtle" id="modePill">RGB</span>
-            </div>
-            <div
-              class="swatch"
-              id="guessSwatch"
-              aria-label="내 색상 미리보기"
-            ></div>
-            <div class="hint" id="guessHint">값을 입력하면 여기 색이 바뀜</div>
-          </div>
-        </div>
+          <div class="divider"></div>
 
-        <div class="controls">
-          <div class="modeRow">
-            <span class="label">입력 방식</span>
-            <label class="radio">
-              <input type="radio" name="mode" value="rgb" checked />
-              <span>RGB</span>
-            </label>
-            <label class="radio">
-              <input type="radio" name="mode" value="hsl" />
-              <span>HSL</span>
-            </label>
+          <div class="field">
+            <label>플레이어 이름 (선택)</label>
+            <div id="playerNames" class="names"></div>
           </div>
 
-          <form id="guessForm" class="form">
-            <!-- RGB inputs -->
-            <div class="grid" id="rgbInputs">
-              <div class="field">
-                <label for="r">R (0~255)</label>
-                <input
-                  id="r"
-                  type="number"
-                  min="0"
-                  max="255"
-                  step="1"
-                  value="128"
-                />
-              </div>
-              <div class="field">
-                <label for="g">G (0~255)</label>
-                <input
-                  id="g"
-                  type="number"
-                  min="0"
-                  max="255"
-                  step="1"
-                  value="128"
-                />
-              </div>
-              <div class="field">
-                <label for="b">B (0~255)</label>
-                <input
-                  id="b"
-                  type="number"
-                  min="0"
-                  max="255"
-                  step="1"
-                  value="128"
-                />
-              </div>
-            </div>
-
-            <!-- HSL inputs -->
-            <div class="grid hidden" id="hslInputs">
-              <div class="field">
-                <label for="h">H (0~360)</label>
-                <input
-                  id="h"
-                  type="number"
-                  min="0"
-                  max="360"
-                  step="1"
-                  value="180"
-                />
-              </div>
-              <div class="field">
-                <label for="s">S (0~100)</label>
-                <input
-                  id="s"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value="50"
-                />
-              </div>
-              <div class="field">
-                <label for="l">L (0~100)</label>
-                <input
-                  id="l"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value="50"
-                />
-              </div>
-            </div>
-
-            <div class="btnRow">
-              <button type="submit" class="btn primary">제출</button>
-              <button type="button" id="nextBtn" class="btn" disabled>
-                다음 색상
-              </button>
-            </div>
-          </form>
-
-          <div class="result" id="resultBox" role="status" aria-live="polite">
-            아직 제출 전이야.
-          </div>
-
-          <div class="stats" id="statsBox">
-            <div class="stat">
-              <div class="k">최고 점수</div>
-              <div class="v" id="bestScore">-</div>
-            </div>
-            <div class="stat">
-              <div class="k">평균 점수</div>
-              <div class="v" id="avgScore">-</div>
-            </div>
-            <div class="stat">
-              <div class="k">최근 ΔE</div>
-              <div class="v" id="lastDE">-</div>
-            </div>
-            <div class="stat">
-              <div class="k">시도 횟수</div>
-              <div class="v" id="tries">0</div>
-            </div>
+          <div class="btnRow">
+            <button id="startBtn" class="btn primary">시작</button>
           </div>
         </div>
       </section>
+
+      <!-- GAME VIEW -->
+      <section id="viewGame" class="view hidden">
+        <div class="panel">
+          <div class="left">
+            <div class="card">
+              <div class="topRow">
+                <div>
+                  <div class="pill" id="turnPill">Turn</div>
+                  <div class="title" id="playerTitle">Player</div>
+                </div>
+                <div class="timerBox">
+                  <div class="timerLabel">남은 시간</div>
+                  <div class="timer" id="timerText">--</div>
+                </div>
+              </div>
+
+              <div class="swatches">
+                <div class="swatchCard">
+                  <div class="labelRow">
+                    <span class="label">정답 색</span>
+                    <span class="pill subtle" id="targetMeta">random</span>
+                  </div>
+                  <div class="swatch" id="targetSwatch"></div>
+                </div>
+
+                <div class="swatchCard">
+                  <div class="labelRow">
+                    <span class="label">내 제출 결과</span>
+                    <span class="pill subtle" id="modePill">RGB</span>
+                  </div>
+                  <div
+                    class="swatch placeholder"
+                    id="guessSwatch"
+                    aria-label="제출 후 공개"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="right">
+            <div class="card">
+              <h2>입력</h2>
+
+              <div class="modeRow">
+                <span class="label">방식</span>
+                <label class="radio">
+                  <input type="radio" name="mode" value="rgb" checked />
+                  <span>RGB</span>
+                </label>
+                <label class="radio">
+                  <input type="radio" name="mode" value="hsl" />
+                  <span>HSL</span>
+                </label>
+              </div>
+
+              <form id="guessForm" class="form">
+                <div class="grid3" id="rgbInputs">
+                  <div class="field">
+                    <label for="r">R (0~255)</label>
+                    <input
+                      id="r"
+                      type="number"
+                      min="0"
+                      max="255"
+                      step="1"
+                      value="128"
+                    />
+                  </div>
+                  <div class="field">
+                    <label for="g">G (0~255)</label>
+                    <input
+                      id="g"
+                      type="number"
+                      min="0"
+                      max="255"
+                      step="1"
+                      value="128"
+                    />
+                  </div>
+                  <div class="field">
+                    <label for="b">B (0~255)</label>
+                    <input
+                      id="b"
+                      type="number"
+                      min="0"
+                      max="255"
+                      step="1"
+                      value="128"
+                    />
+                  </div>
+                </div>
+
+                <div class="grid3 hidden" id="hslInputs">
+                  <div class="field">
+                    <label for="h">H (0~360)</label>
+                    <input
+                      id="h"
+                      type="number"
+                      min="0"
+                      max="360"
+                      step="1"
+                      value="180"
+                    />
+                  </div>
+                  <div class="field">
+                    <label for="s">S (0~100)</label>
+                    <input
+                      id="s"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value="50"
+                    />
+                  </div>
+                  <div class="field">
+                    <label for="l">L (0~100)</label>
+                    <input
+                      id="l"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value="50"
+                    />
+                  </div>
+                </div>
+
+                <div class="btnRow">
+                  <button type="submit" class="btn primary" id="submitBtn">
+                    제출
+                  </button>
+                </div>
+              </form>
+
+              <div id="resultBox" class="result" aria-live="polite">
+                제출하면 여기 결과가 뜸.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5초 준비 오버레이 -->
+        <div
+          id="overlay"
+          class="overlay hidden"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div class="overlayCard">
+            <div class="overlayTitle" id="overlayTitle">다음 사람 준비</div>
+            <div class="overlayTime" id="overlayTime">5</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RESULTS VIEW -->
+      <section id="viewResults" class="view hidden">
+        <div class="card">
+          <h2>결과 / 순위</h2>
+
+          <div class="tableWrap">
+            <table class="table" id="resultsTable">
+              <thead>
+                <tr>
+                  <th>순위</th>
+                  <th>이름</th>
+                  <th>ΔE</th>
+                  <th>점수</th>
+                  <th>상태</th>
+                  <th>정답</th>
+                  <th>내 제출</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="btnRow">
+            <button id="restartBtn" class="btn primary">처음으로</button>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <small>ΔE(1976) 기준: 작을수록 더 비슷.</small>
+      </footer>
     </div>
 
     <script src="script.js"></script>
