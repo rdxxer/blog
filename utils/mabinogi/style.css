@@ -47,7 +47,7 @@ body {
 }
 .sub {
   margin: 0 0 18px;
-  color: rgba(233, 236, 255, 0.7);
+  color: var(--muted);
   line-height: 1.5;
 }
 
@@ -76,7 +76,7 @@ h2 {
 .field label {
   display: block;
   font-size: 12px;
-  color: rgba(233, 236, 255, 0.7);
+  color: var(--muted);
   margin-bottom: 6px;
 }
 
@@ -189,7 +189,7 @@ h2 {
 }
 .timerLabel {
   font-size: 12px;
-  color: rgba(233, 236, 255, 0.7);
+  color: var(--muted);
 }
 .timer {
   font-size: 22px;
@@ -207,7 +207,7 @@ h2 {
   color: var(--text);
 }
 .pill.subtle {
-  color: rgba(233, 236, 255, 0.7);
+  color: var(--muted);
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -240,22 +240,10 @@ h2 {
   background: #000;
 }
 
-/* 제출 전 숨김 표시 */
-.swatch.placeholder {
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(255, 255, 255, 0.1) 0px,
-    rgba(255, 255, 255, 0.1) 10px,
-    rgba(0, 0, 0, 0.08) 10px,
-    rgba(0, 0, 0, 0.08) 20px
-  );
-}
-
 .modeRow {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 10px;
 }
 
 .radio {
@@ -337,7 +325,7 @@ h2 {
 .table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 720px;
+  min-width: 820px;
 }
 .table th,
 .table td {
@@ -348,7 +336,7 @@ h2 {
   vertical-align: middle;
 }
 .table th {
-  color: rgba(233, 236, 255, 0.7);
+  color: var(--muted);
   font-weight: 800;
 }
 .swatchMini {

@@ -46,8 +46,22 @@
 
           <div class="divider"></div>
 
+          <div class="modeRow">
+            <span class="label">입력 방식(전원 동일)</span>
+            <label class="radio">
+              <input type="radio" name="setupMode" value="rgb" checked />
+              <span>RGB</span>
+            </label>
+            <label class="radio">
+              <input type="radio" name="setupMode" value="hsl" />
+              <span>HSL</span>
+            </label>
+          </div>
+
+          <div class="divider"></div>
+
           <div class="field">
-            <label>플레이어 이름 (선택)</label>
+            <label>플레이어 이름</label>
             <div id="playerNames" class="names"></div>
           </div>
 
@@ -84,14 +98,10 @@
 
                 <div class="swatchCard">
                   <div class="labelRow">
-                    <span class="label">내 제출 결과</span>
+                    <span class="label">내 입력 미리보기</span>
                     <span class="pill subtle" id="modePill">RGB</span>
                   </div>
-                  <div
-                    class="swatch placeholder"
-                    id="guessSwatch"
-                    aria-label="제출 후 공개"
-                  ></div>
+                  <div class="swatch" id="guessSwatch"></div>
                 </div>
               </div>
             </div>
@@ -100,18 +110,6 @@
           <div class="right">
             <div class="card">
               <h2>입력</h2>
-
-              <div class="modeRow">
-                <span class="label">방식</span>
-                <label class="radio">
-                  <input type="radio" name="mode" value="rgb" checked />
-                  <span>RGB</span>
-                </label>
-                <label class="radio">
-                  <input type="radio" name="mode" value="hsl" />
-                  <span>HSL</span>
-                </label>
-              </div>
 
               <form id="guessForm" class="form">
                 <div class="grid3" id="rgbInputs">
@@ -194,13 +192,13 @@
               </form>
 
               <div id="resultBox" class="result" aria-live="polite">
-                제출하면 여기 결과가 뜸.
+                시작하면 여기 결과가 뜸.
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 5초 준비 오버레이 -->
+        <!-- 5초 준비 오버레이 (마지막 사람 뒤에는 안 뜸) -->
         <div
           id="overlay"
           class="overlay hidden"
@@ -226,10 +224,10 @@
                   <th>순위</th>
                   <th>이름</th>
                   <th>ΔE</th>
-                  <th>점수</th>
+                  <th>점수(참고)</th>
                   <th>상태</th>
                   <th>정답</th>
-                  <th>내 제출</th>
+                  <th>내 입력</th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -243,7 +241,7 @@
       </section>
 
       <footer class="footer">
-        <small>ΔE(1976) 기준: 작을수록 더 비슷.</small>
+        <small>ΔE가 작을수록 더 비슷함.</small>
       </footer>
     </div>
 

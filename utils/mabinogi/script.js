@@ -1,8 +1,9 @@
-/* 멀티플레이 색 맞히기
-   - 제출 전 guess 미리보기 없음
-   - 제출 후 잠깐(기본 2초) guess 색 보여준 다음:
-     - 마지막 플레이어면 -> 바로 결과 화면
-     - 아니면 -> 5초 오버레이 후 다음 플레이어
+/* 멀티플레이 색 맞히기 (RGB/HSL 고정)
+   - Setup에서 RGB/HSL을 하나로 고정해서 전원 동일하게 플레이
+   - 제출/시간초과 후: 결과를 잠깐 보여준 뒤
+       * 다음 사람이 있으면 5초 오버레이 -> 다음 사람
+       * 마지막 사람이면 오버레이 없이 결과 화면으로 이동
+   - 순위: ΔE(1976) 오름차순, 시간초과는 ΔE=∞로 맨 뒤
 */
 
 function log(...args) {
@@ -13,18 +14,15 @@ function log(...args) {
 const $ = (sel) => document.querySelector(sel)
 
 const els = {
-  // views
   viewSetup: $('#viewSetup'),
   viewGame: $('#viewGame'),
   viewResults: $('#viewResults'),
 
-  // setup
   numPlayers: $('#numPlayers'),
   timeLimit: $('#timeLimit'),
   playerNames: $('#playerNames'),
   startBtn: $('#startBtn'),
 
-  // game
   turnPill: $('#turnPill'),
   playerTitle: $('#playerTitle'),
   timerText: $('#timerText'),
@@ -46,30 +44,28 @@ const els = {
   submitBtn: $('#submitBtn'),
   resultBox: $('#resultBox'),
 
-  // overlay
   overlay: $('#overlay'),
   overlayTitle: $('#overlayTitle'),
   overlayTime: $('#overlayTime'),
 
-  // results
   resultsTbody: $('#resultsTable tbody'),
   restartBtn: $('#restartBtn'),
 }
 
-const REVEAL_AFTER_SUBMIT_MS = 2000 // 제출 색 보여주는 시간(원하면 3000 등으로)
-const OVERLAY_WAIT_SEC = 5 // 다음 사람 준비 시간
-const TIMEOUT_PAUSE_MS = 800 // 시간초과 후 너무 휙 넘어가지 않게 살짝만
+// === 여기서 결과 보여주는 시간만 바꾸면 됨 ===
+const RESULT_SHOW_MS = 2500 // 제출/시간초과 후 결과를 보여주는 시간(밀리초)
+// =================================================
 
 const state = {
   mode: 'rgb',
   timeLimitSec: 25,
-  players: [], // { name, targetRGB, guessRGB, de, score, status }
+  players: [],
   currentIdx: 0,
 
   timerId: null,
-  phase: 'idle', // idle | guessing | reveal | overlay | done
   overlayId: null,
-  postTurnId: null,
+  transitionDelayId: null,
+  phase: 'idle', // idle | guessing | showing_result | transition | done
 }
 
 function clamp(x, lo, hi) {
@@ -84,16 +80,15 @@ function showView(which) {
   log('showView:', which)
 }
 
-function isLastTurn() {
-  return state.currentIdx === state.players.length - 1
-}
-
-function clearPostTurnTimer() {
-  if (state.postTurnId) {
-    clearTimeout(state.postTurnId)
-    state.postTurnId = null
-    log('postTurn timer cleared')
-  }
+/* -----------------------------
+   입력 잠금/해제
+----------------------------- */
+function setInputsDisabled(disabled) {
+  ;[els.r, els.g, els.b, els.h, els.s, els.l].forEach((x) => {
+    x.disabled = disabled
+  })
+  els.submitBtn.disabled = disabled
+  log('setInputsDisabled:', disabled)
 }
 
 /* -----------------------------
@@ -115,7 +110,7 @@ function rgbToCss(rgb) {
 }
 
 /* -----------------------------
-   HSL <-> RGB
+   HSL -> RGB
 ----------------------------- */
 function hslToRgb(h, s, l) {
   h = ((h % 360) + 360) % 360
@@ -146,7 +141,6 @@ function hslToRgb(h, s, l) {
 
 /* -----------------------------
    ΔE(1976) 계산
-   sRGB -> linear -> XYZ(D65) -> Lab
 ----------------------------- */
 function srgbToLinear(c) {
   c = clamp(c, 0, 255) / 255
@@ -171,7 +165,7 @@ function fLab(t) {
 function xyzToLab({ X, Y, Z }) {
   const Xn = 0.95047,
     Yn = 1.0,
-    Zn = 1.08883 // D65
+    Zn = 1.08883
   const fx = fLab(X / Xn)
   const fy = fLab(Y / Yn)
   const fz = fLab(Z / Zn)
@@ -194,28 +188,15 @@ function scoreFromDeltaE(de) {
 }
 
 /* -----------------------------
-   입력
+   모드(게임 전체 고정)
 ----------------------------- */
-function setInputsEnabled(on) {
-  const all = [
-    els.r,
-    els.g,
-    els.b,
-    els.h,
-    els.s,
-    els.l,
-    ...document.querySelectorAll("input[name='mode']"),
-  ]
-  all.forEach((x) => x && (x.disabled = !on))
-  els.submitBtn.disabled = !on
-}
-
-function setMode(mode) {
+function applyFixedMode(mode) {
   state.mode = mode
   els.modePill.textContent = mode.toUpperCase()
   els.rgbInputs.classList.toggle('hidden', mode !== 'rgb')
   els.hslInputs.classList.toggle('hidden', mode !== 'hsl')
-  log('setMode:', mode)
+  log('applyFixedMode:', mode)
+  updateGuessPreview()
 }
 
 function readGuessAsRGB() {
@@ -230,6 +211,12 @@ function readGuessAsRGB() {
   const s = clamp(parseFloat(els.s.value), 0, 100)
   const l = clamp(parseFloat(els.l.value), 0, 100)
   return hslToRgb(h, s, l)
+}
+
+function updateGuessPreview() {
+  if (state.phase !== 'guessing') return
+  const guess = readGuessAsRGB()
+  els.guessSwatch.style.background = rgbToCss(guess)
 }
 
 /* -----------------------------
@@ -247,8 +234,8 @@ function startTimer(seconds) {
   stopTimer()
   const start = performance.now()
 
-  const render = (leftMs) => {
-    const s = Math.max(0, leftMs) / 1000
+  const render = (msLeft) => {
+    const s = Math.max(0, msLeft) / 1000
     els.timerText.textContent = s.toFixed(1) + 's'
   }
 
@@ -268,7 +255,7 @@ function startTimer(seconds) {
 }
 
 /* -----------------------------
-   Setup
+   Setup UI
 ----------------------------- */
 function buildNameInputs(n) {
   els.playerNames.innerHTML = ''
@@ -298,13 +285,23 @@ function getPlayerNames(n) {
   return names
 }
 
+function getSetupMode() {
+  const checked = document.querySelector("input[name='setupMode']:checked")
+  return checked?.value === 'hsl' ? 'hsl' : 'rgb'
+}
+
+/* -----------------------------
+   게임 진행
+----------------------------- */
 function initGameFromSetup() {
   const n = clamp(parseInt(els.numPlayers.value, 10), 1, 50)
   const t = clamp(parseInt(els.timeLimit.value, 10), 3, 300)
+  const mode = getSetupMode()
 
   state.timeLimitSec = t
-  const names = getPlayerNames(n)
+  applyFixedMode(mode)
 
+  const names = getPlayerNames(n)
   state.players = names.map((name) => ({
     name,
     targetRGB: null,
@@ -316,7 +313,8 @@ function initGameFromSetup() {
 
   state.currentIdx = 0
   state.phase = 'idle'
-  log('initGameFromSetup:', { n, t, names })
+
+  log('initGameFromSetup:', { n, t, mode, names })
 }
 
 function startGame() {
@@ -325,30 +323,12 @@ function startGame() {
   startTurn()
 }
 
-/* -----------------------------
-   Swatch 보여주기/숨기기
------------------------------ */
-function hideGuessSwatch() {
-  els.guessSwatch.classList.add('placeholder')
-  els.guessSwatch.style.background = ''
-}
-
-function revealGuessSwatch(rgb) {
-  els.guessSwatch.classList.remove('placeholder')
-  els.guessSwatch.style.background = rgbToCss(rgb)
-}
-
-/* -----------------------------
-   게임 진행
------------------------------ */
 function startTurn() {
-  clearPostTurnTimer()
-  clearOverlayInterval()
-
   const p = state.players[state.currentIdx]
   if (!p) return
 
   state.phase = 'guessing'
+  setInputsDisabled(false)
 
   p.targetRGB = randomRGB()
   p.guessRGB = null
@@ -362,8 +342,7 @@ function startTurn() {
   els.playerTitle.textContent = p.name
   els.targetMeta.textContent = 'random'
   els.targetSwatch.style.background = rgbToCss(p.targetRGB)
-
-  hideGuessSwatch()
+  els.resultBox.textContent = ''
 
   // 입력값 초기화
   els.r.value = 128
@@ -372,13 +351,44 @@ function startTurn() {
   els.h.value = 180
   els.s.value = 50
   els.l.value = 50
-
-  setInputsEnabled(true)
-  els.resultBox.textContent = '제출하면 내 색이 공개됨.'
+  updateGuessPreview()
 
   log('startTurn:', state.currentIdx, p.name, 'targetRGB=', p.targetRGB)
 
   startTimer(state.timeLimitSec)
+}
+
+function isLastPlayer() {
+  return state.currentIdx === state.players.length - 1
+}
+
+function clearTransitionDelay() {
+  if (state.transitionDelayId) {
+    clearTimeout(state.transitionDelayId)
+    state.transitionDelayId = null
+    log('transitionDelay cleared')
+  }
+}
+
+/* 제출/시간초과 후 결과를 보여주는 시간을 확보한 뒤 다음 단계로 */
+function afterShowResultProceed() {
+  state.phase = 'showing_result'
+  setInputsDisabled(true)
+
+  clearTransitionDelay()
+
+  const last = isLastPlayer()
+  log('afterShowResultProceed scheduled:', { ms: RESULT_SHOW_MS, last })
+
+  state.transitionDelayId = setTimeout(() => {
+    state.transitionDelayId = null
+
+    if (last) {
+      finishGame() // 마지막: 오버레이 없이 바로 결과 화면
+    } else {
+      beginTransition() // 다음 사람: 오버레이(5초) 후 다음 턴
+    }
+  }, RESULT_SHOW_MS)
 }
 
 function submitCurrent() {
@@ -388,45 +398,38 @@ function submitCurrent() {
   if (!p) return
 
   stopTimer()
-  setInputsEnabled(false)
 
   const guess = readGuessAsRGB()
   const target = p.targetRGB
 
-  const guessRGB = {
+  const de = deltaE76(guess, target)
+  const score = scoreFromDeltaE(de)
+
+  p.guessRGB = {
     r: Math.round(guess.r),
     g: Math.round(guess.g),
     b: Math.round(guess.b),
   }
-  const de = deltaE76(guessRGB, target)
-  const score = scoreFromDeltaE(de)
-
-  p.guessRGB = guessRGB
   p.de = de
   p.score = score
   p.status = '성공'
 
-  // 제출 후에만 내 색 공개
-  revealGuessSwatch(guessRGB)
-
   els.resultBox.innerHTML =
-    `<div><b>저장 완료!</b></div>` +
-    `<div>ΔE: <b>${de.toFixed(2)}</b> / 점수: <b>${score.toFixed(1)}</b></div>`
+    `<div><b>저장 완료</b></div>` +
+    `<div>ΔE: <b>${de.toFixed(2)}</b> / 점수(참고): <b>${score.toFixed(
+      1
+    )}</b></div>` +
+    `<div>정답 RGB(${target.r}, ${target.g}, ${target.b})</div>` +
+    `<div>내 입력 RGB(${p.guessRGB.r}, ${p.guessRGB.g}, ${p.guessRGB.b})</div>`
 
-  log('submitCurrent:', p.name, { de, score, guessRGB, targetRGB: target })
+  log('submitCurrent:', p.name, {
+    de,
+    score,
+    guessRGB: p.guessRGB,
+    targetRGB: target,
+  })
 
-  // ✅ 오버레이 뜨기 전에, 내 색 보여줄 시간 확보
-  state.phase = 'reveal'
-  clearPostTurnTimer()
-  state.postTurnId = setTimeout(() => {
-    if (isLastTurn()) {
-      // 마지막이면 오버레이 없이 바로 결과로
-      finishGame()
-    } else {
-      // 아니면 오버레이로 넘어감
-      beginOverlay()
-    }
-  }, REVEAL_AFTER_SUBMIT_MS)
+  afterShowResultProceed()
 }
 
 function onTimeout() {
@@ -435,36 +438,20 @@ function onTimeout() {
   const p = state.players[state.currentIdx]
   if (!p) return
 
-  stopTimer()
-  setInputsEnabled(false)
-
   p.guessRGB = null
   p.de = Infinity
   p.score = 0
   p.status = '시간초과'
 
-  hideGuessSwatch()
-  els.resultBox.innerHTML = `<div><b>시간초과!</b></div>`
-
+  els.resultBox.innerHTML = `<div><b>시간초과</b></div>`
   log('timeout:', p.name)
 
-  // 시간초과는 굳이 오래 보여줄 건 없어서 짧게만
-  state.phase = 'reveal'
-  clearPostTurnTimer()
-  state.postTurnId = setTimeout(() => {
-    if (isLastTurn()) finishGame()
-    else beginOverlay()
-  }, TIMEOUT_PAUSE_MS)
+  afterShowResultProceed()
 }
 
 /* -----------------------------
-   오버레이(다음 사람 준비) - 마지막엔 절대 안 뜸
+   오버레이(다음 사람만)
 ----------------------------- */
-function beginOverlay() {
-  state.phase = 'overlay'
-  showOverlayForNext(OVERLAY_WAIT_SEC)
-}
-
 function clearOverlayInterval() {
   if (state.overlayId) {
     clearInterval(state.overlayId)
@@ -473,21 +460,27 @@ function clearOverlayInterval() {
   }
 }
 
+function beginTransition() {
+  state.phase = 'transition'
+  showOverlayForNext(5)
+}
+
 function showOverlayForNext(seconds) {
-  // 여기 호출되는 경우는 "마지막이 아님"이 보장됨
   clearOverlayInterval()
 
+  const nextName = state.players[state.currentIdx + 1]?.name ?? ''
+  els.overlayTitle.textContent = `다음 사람: ${nextName}`
   els.overlay.classList.remove('hidden')
-  els.overlayTitle.textContent = '다음 사람 준비'
 
   let left = seconds
   els.overlayTime.textContent = String(left)
 
-  log('overlay start:', { seconds })
+  log('overlay start:', { seconds, nextName })
 
   state.overlayId = setInterval(() => {
     left -= 1
     els.overlayTime.textContent = String(Math.max(0, left))
+
     if (left <= 0) {
       clearOverlayInterval()
       els.overlay.classList.add('hidden')
@@ -502,23 +495,25 @@ function goNext() {
     finishGame()
     return
   }
-  log('goNext -> next turn:', state.currentIdx)
+  log('goNext ->', state.currentIdx)
   startTurn()
 }
 
+/* -----------------------------
+   결과
+----------------------------- */
 function finishGame() {
   state.phase = 'done'
   stopTimer()
   clearOverlayInterval()
-  clearPostTurnTimer()
+  clearTransitionDelay()
+  els.overlay.classList.add('hidden')
+
   log('finishGame')
   renderResults()
   showView('results')
 }
 
-/* -----------------------------
-   결과 렌더링
------------------------------ */
 function renderResults() {
   const arr = state.players
     .map((p, i) => ({ ...p, idx: i }))
@@ -580,19 +575,13 @@ function renderResults() {
 /* -----------------------------
    이벤트
 ----------------------------- */
-function wireModeRadios() {
-  document.querySelectorAll("input[name='mode']").forEach((radio) => {
-    radio.addEventListener('change', (e) => setMode(e.target.value))
-  })
-}
-
 els.numPlayers.addEventListener('input', () => {
   const n = clamp(parseInt(els.numPlayers.value, 10), 1, 50)
   buildNameInputs(n)
 })
 
 els.startBtn.addEventListener('click', () => {
-  log('Start button clicked')
+  log('Start clicked')
   startGame()
 })
 
@@ -601,11 +590,16 @@ els.guessForm.addEventListener('submit', (e) => {
   submitCurrent()
 })
 
+;['r', 'g', 'b', 'h', 's', 'l'].forEach((id) => {
+  const el = $('#' + id)
+  el.addEventListener('input', updateGuessPreview)
+})
+
 els.restartBtn.addEventListener('click', () => {
-  log('Restart button clicked')
+  log('Restart clicked')
   stopTimer()
   clearOverlayInterval()
-  clearPostTurnTimer()
+  clearTransitionDelay()
 
   state.players = []
   state.currentIdx = 0
@@ -618,7 +612,6 @@ els.restartBtn.addEventListener('click', () => {
 ;(function init() {
   log('init')
   buildNameInputs(clamp(parseInt(els.numPlayers.value, 10), 1, 50))
-  wireModeRadios()
-  setMode('rgb')
+  applyFixedMode(getSetupMode())
   showView('setup')
 })()
