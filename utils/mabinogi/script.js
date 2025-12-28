@@ -438,13 +438,36 @@ function onTimeout() {
   const p = state.players[state.currentIdx]
   if (!p) return
 
-  p.guessRGB = null
-  p.de = Infinity
-  p.score = 0
-  p.status = '시간초과'
+  // 시간초과 순간의 입력값으로 자동 제출
+  const guess = readGuessAsRGB()
+  const target = p.targetRGB
 
-  els.resultBox.innerHTML = `<div><b>시간초과</b></div>`
-  log('timeout:', p.name)
+  const de = deltaE76(guess, target)
+  const score = scoreFromDeltaE(de)
+
+  p.guessRGB = {
+    r: Math.round(guess.r),
+    g: Math.round(guess.g),
+    b: Math.round(guess.b),
+  }
+  p.de = de
+  p.score = score
+  p.status = '시간초과(자동제출)'
+
+  els.resultBox.innerHTML =
+    `<div><b>시간초과 (자동제출)</b></div>` +
+    `<div>ΔE: <b>${de.toFixed(2)}</b> / 점수(참고): <b>${score.toFixed(
+      1
+    )}</b></div>` +
+    `<div>정답 RGB(${target.r}, ${target.g}, ${target.b})</div>` +
+    `<div>내 입력 RGB(${p.guessRGB.r}, ${p.guessRGB.g}, ${p.guessRGB.b})</div>`
+
+  log('timeout(auto-submit):', p.name, {
+    de,
+    score,
+    guessRGB: p.guessRGB,
+    targetRGB: target,
+  })
 
   afterShowResultProceed()
 }
@@ -589,7 +612,6 @@ els.guessForm.addEventListener('submit', (e) => {
   e.preventDefault()
   submitCurrent()
 })
-
 ;['r', 'g', 'b', 'h', 's', 'l'].forEach((id) => {
   const el = $('#' + id)
   el.addEventListener('input', updateGuessPreview)
