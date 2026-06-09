@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IDS 검색</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="layout">
+    <section class="pane">
+      <h1>파자 검색</h1>
+      <div class="search-row">
+        <input id="charQuery" type="text" placeholder="예: 七, 𢧂" autocomplete="off" />
+        <button id="decomposeBtn" type="button">검색</button>
+      </div>
+      <div id="decomposeResult" class="result muted">IDS.TXT를 읽는 중...</div>
+    </section>
+
+    <section class="pane">
+      <h1>합자 검색</h1>
+      <div class="search-row">
+        <input id="componentQuery" type="text" placeholder="예: 一乚, {69}口, 咅戈" autocomplete="off" />
+        <button id="composeBtn" type="button">검색</button>
+      </div>
+      <div id="composeResult" class="result muted">IDS.TXT를 읽는 중...</div>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
