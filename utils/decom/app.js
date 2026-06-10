@@ -24,6 +24,35 @@ function isIDC(ch) {
   return cp >= IDC_START && cp <= IDC_END
 }
 
+function isCompatibilityIdeograph(ch) {
+  const cp = ch.codePointAt(0)
+
+  return (
+    // CJK Compatibility Ideographs
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    // CJK Compatibility Ideographs Supplement
+    (cp >= 0x2f800 && cp <= 0x2fa1f)
+  )
+}
+
+function normalizeCompatChar(ch) {
+  if (!ch) return ch
+  if (!isCompatibilityIdeograph(ch)) return ch
+  return ch.normalize('NFKC')
+}
+
+function normalizeCompatToken(token) {
+  // {69} 같은 IDS 전용 토큰은 건드리지 않는다.
+  if (token.startsWith('{') && token.endsWith('}')) return token
+
+  // 이 시스템에서는 일반 구성요소 토큰은 한 글자라고 본다.
+  return normalizeCompatChar(token)
+}
+
+function normalizeCompatTokens(tokens) {
+  return tokens.map(normalizeCompatToken)
+}
+
 function escapeHTML(s) {
   return String(s).replace(
     /[&<>"']/g,
@@ -83,6 +112,7 @@ function tokenizeExpression(expr) {
     if (ch === '^' || ch === '$') continue
     if (isIDC(ch) || IGNORED_SINGLE_CHARS.has(ch)) continue
 
+    // {69}, {97} 같은 비유니코드 구성요소는 하나의 토큰으로 보존한다.
     if (ch === '{') {
       let token = '{'
       i++
@@ -100,7 +130,7 @@ function tokenizeExpression(expr) {
     tokens.push(ch)
   }
 
-  return tokens
+  return normalizeCompatTokens(tokens)
 }
 
 function parseDecompositionField(field) {
@@ -120,6 +150,9 @@ function parseIDS(text) {
   const lines = text.split(/\r?\n/)
 
   for (const line of lines) {
+    // 탭 뒤에 나오는 *부터는 주석으로 취급한다.
+    // 예:
+    // U+652C 攬 ^⿰扌覽$(GHTJKPV) *U+652C(V) was ...
     const dataLine = line.split(/\t\s*\*/u)[0]
 
     const trimmed = dataLine.trim()
@@ -129,7 +162,7 @@ function parseIDS(text) {
     if (cols.length < 3) continue
 
     const code = cols[0].trim()
-    const char = cols[1].trim()
+    const char = normalizeCompatChar(cols[1].trim())
     const fields = cols.slice(2)
 
     const seen = new Set()
@@ -196,7 +229,8 @@ async function loadIDS() {
 }
 
 function renderDecomposeResult(query) {
-  const q = Array.from(query.trim())[0] ?? ''
+  const inputChar = Array.from(query.trim())[0] ?? ''
+  const q = normalizeCompatChar(inputChar)
 
   if (!q) {
     els.decomposeResult.innerHTML = `<p class="empty">검색할 한자를 입력해줘.</p>`
@@ -207,12 +241,18 @@ function renderDecomposeResult(query) {
 
   if (found.length === 0) {
     els.decomposeResult.innerHTML = `<p class="empty">${escapeHTML(
-      q
+      inputChar
     )}의 파자 데이터를 찾지 못했어.</p>`
     return
   }
 
   let html = ''
+
+  if (inputChar && inputChar !== q) {
+    html += `<div class="count">${escapeHTML(inputChar)} → ${escapeHTML(
+      q
+    )}로 정규화해서 검색함</div>`
+  }
 
   for (const entry of found) {
     html += `<div class="entry">
@@ -249,14 +289,18 @@ function renderComposeResult(query) {
   }
 
   const queryTokens = tokenizeExpression(raw)
+
   if (queryTokens.length === 0) {
     els.composeResult.innerHTML = `<p class="empty">실제 구성요소로 해석되는 입력이 없어.</p>`
     return
   }
 
   const matches = []
+
   for (const entry of entries) {
-    if (entryMatches(entry, queryTokens)) matches.push(entry)
+    if (entryMatches(entry, queryTokens)) {
+      matches.push(entry)
+    }
   }
 
   if (matches.length === 0) {
@@ -268,8 +312,9 @@ function renderComposeResult(query) {
   const shown = matches.slice(0, limit)
 
   let html = `<div class="count">결과 ${matches.length.toLocaleString()}개`
-  if (matches.length > limit)
+  if (matches.length > limit) {
     html += ` 중 처음 ${limit.toLocaleString()}개만 표시`
+  }
   html += `</div>`
 
   for (const entry of shown) {
@@ -300,14 +345,16 @@ els.composeBtn.addEventListener('click', () => {
 })
 
 els.charQuery.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') renderDecomposeResult(els.charQuery.value)
+  if (event.key === 'Enter') {
+    renderDecomposeResult(els.charQuery.value)
+  }
 })
 
 els.componentQuery.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') renderComposeResult(els.componentQuery.value)
+  if (event.key === 'Enter') {
+    renderComposeResult(els.componentQuery.value)
+  }
 })
-
-loadIDS()
 
 document.addEventListener('click', async (event) => {
   const badge = event.target.closest('.badge')
@@ -327,3 +374,5 @@ document.addEventListener('click', async (event) => {
     console.error('copy failed:', err)
   }
 })
+
+loadIDS()
