@@ -120,10 +120,12 @@ function parseIDS(text) {
   const lines = text.split(/\r?\n/)
 
   for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
+    const dataLine = line.split(/\t\s*\*/u)[0]
 
-    const cols = line.split('\t')
+    const trimmed = dataLine.trim()
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('*')) continue
+
+    const cols = dataLine.split('\t')
     if (cols.length < 3) continue
 
     const code = cols[0].trim()
