@@ -37,10 +37,13 @@ const state = {
   index: 0,
   selectedPathIds: new Set(),
   strokeElements: new Map(),
+  hitElements: new Map(),
   answerVisible: false,
   correctCount: 0,
   wrongAnswers: [],
   renderToken: 0,
+  dragSelection: null,
+  suppressStrokeClick: false,
 };
 
 init();
@@ -105,6 +108,9 @@ async function renderQuestion() {
 
   state.selectedPathIds = new Set();
   state.strokeElements = new Map();
+  state.hitElements = new Map();
+  state.dragSelection = null;
+  state.suppressStrokeClick = false;
   state.answerVisible = false;
 
   elements.progress.textContent = `${state.index + 1} / ${state.questions.length}`;
@@ -181,8 +187,12 @@ function prepareInteractiveSvg(svg) {
     hitPath.setAttribute("tabindex", "0");
     hitPath.setAttribute("aria-label", `${strokeNumberFromId(pathId)}画目`);
     hitPath.setAttribute("aria-pressed", "false");
+    state.hitElements.set(pathId, hitPath);
 
-    hitPath.addEventListener("click", () => toggleStroke(pathId, hitPath));
+    hitPath.addEventListener("click", () => {
+      if (state.suppressStrokeClick) return;
+      toggleStroke(pathId, hitPath);
+    });
     hitPath.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
@@ -192,6 +202,216 @@ function prepareInteractiveSvg(svg) {
 
     path.after(hitPath);
   }
+
+  const selectionRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  selectionRect.classList.add("selection-rect");
+  selectionRect.setAttribute("pointer-events", "none");
+  hideSelectionRect(selectionRect);
+  svg.append(selectionRect);
+
+  installDragSelection(svg, selectionRect);
+}
+
+function installDragSelection(svg, selectionRect) {
+  const dragThreshold = 6;
+
+  svg.addEventListener("pointerdown", (event) => {
+    if (state.answerVisible || event.button !== 0 || state.dragSelection) return;
+
+    const hitPath = event.target instanceof Element
+      ? event.target.closest(".hit-line")
+      : null;
+
+    state.dragSelection = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startPoint: clientPointToSvg(svg, event.clientX, event.clientY),
+      clickPathId: hitPath?.dataset.pathId || null,
+      dragging: false,
+    };
+
+    svg.setPointerCapture(event.pointerId);
+  });
+
+  svg.addEventListener("pointermove", (event) => {
+    const drag = state.dragSelection;
+    if (!drag || drag.pointerId !== event.pointerId || state.answerVisible) return;
+
+    const distance = Math.hypot(
+      event.clientX - drag.startClientX,
+      event.clientY - drag.startClientY,
+    );
+
+    if (!drag.dragging && distance < dragThreshold) return;
+
+    drag.dragging = true;
+    event.preventDefault();
+
+    const currentPoint = clientPointToSvg(svg, event.clientX, event.clientY);
+    updateSelectionRect(selectionRect, normalizedRect(drag.startPoint, currentPoint));
+  });
+
+  svg.addEventListener("pointerup", (event) => {
+    finishDragSelection(svg, selectionRect, event);
+  });
+
+  svg.addEventListener("pointercancel", (event) => {
+    finishDragSelection(svg, selectionRect, event, true);
+  });
+
+  svg.addEventListener("lostpointercapture", () => {
+    // pointerup 처리 밖에서 캡처가 강제로 사라진 경우에도
+    // 투명 오버레이와 드래그 상태가 남지 않게 한다.
+    cancelDragSelection(selectionRect);
+  });
+}
+
+function finishDragSelection(svg, selectionRect, event, cancelled = false) {
+  const drag = state.dragSelection;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+
+  let selectionBounds = null;
+  let clickPathId = null;
+
+  try {
+    if (drag.dragging && !cancelled && !state.answerVisible) {
+      event.preventDefault();
+      const currentPoint = clientPointToSvg(svg, event.clientX, event.clientY);
+      selectionBounds = normalizedRect(drag.startPoint, currentPoint);
+    } else if (!cancelled && !state.answerVisible) {
+      clickPathId = drag.clickPathId;
+    }
+  } finally {
+    // 획 교차 판정에서 문제가 생기더라도 먼저 드래그 UI를 완전히 정리한다.
+    state.dragSelection = null;
+    hideSelectionRect(selectionRect);
+
+    if (svg.hasPointerCapture(event.pointerId)) {
+      svg.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  // 포인터 캡처를 사용하면 브라우저의 click 대상이 개별 획이 아니라 SVG가 될 수 있다.
+  // 드래그하지 않은 경우에는 pointerdown 때 눌렀던 획을 여기서 직접 토글한다.
+  if (clickPathId) {
+    const hitPath = state.hitElements.get(clickPathId);
+    if (hitPath) toggleStroke(clickPathId, hitPath);
+
+    // 일부 브라우저가 추가로 생성하는 native click에 의한 이중 토글을 막는다.
+    state.suppressStrokeClick = true;
+    window.setTimeout(() => {
+      state.suppressStrokeClick = false;
+    }, 0);
+    return;
+  }
+
+  if (!selectionBounds) return;
+
+  selectStrokesInRect(selectionBounds);
+
+  // 드래그 종료 직후 브라우저가 생성하는 click이 마지막 획을 다시 토글하지 않게 한다.
+  state.suppressStrokeClick = true;
+  window.setTimeout(() => {
+    state.suppressStrokeClick = false;
+  }, 0);
+}
+
+function cancelDragSelection(selectionRect) {
+  state.dragSelection = null;
+  hideSelectionRect(selectionRect);
+}
+
+function hideSelectionRect(selectionRect) {
+  selectionRect.style.display = "none";
+  selectionRect.setAttribute("width", "0");
+  selectionRect.setAttribute("height", "0");
+}
+
+function selectStrokesInRect(rect) {
+  for (const [pathId, path] of state.strokeElements) {
+    let intersects = false;
+
+    try {
+      intersects = pathIntersectsRect(path, rect);
+    } catch (error) {
+      console.warn(`画 ${pathId} の範囲判定をスキップしました`, error);
+    }
+
+    if (!intersects) continue;
+
+    state.selectedPathIds.add(pathId);
+    path.classList.add("is-selected");
+    state.hitElements.get(pathId)?.setAttribute("aria-pressed", "true");
+  }
+}
+
+function pathIntersectsRect(path, rect) {
+  const bbox = path.getBBox();
+  if (!rectsIntersect(rect, bbox)) return false;
+
+  if (
+    bbox.x >= rect.x &&
+    bbox.y >= rect.y &&
+    bbox.x + bbox.width <= rect.x + rect.width &&
+    bbox.y + bbox.height <= rect.y + rect.height
+  ) {
+    return true;
+  }
+
+  const length = path.getTotalLength();
+  const sampleStep = 1.5;
+
+  for (let distance = 0; distance < length; distance += sampleStep) {
+    if (pointInRect(path.getPointAtLength(distance), rect)) return true;
+  }
+
+  return pointInRect(path.getPointAtLength(length), rect);
+}
+
+function clientPointToSvg(svg, clientX, clientY) {
+  const point = svg.createSVGPoint();
+  point.x = clientX;
+  point.y = clientY;
+
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return { x: 0, y: 0 };
+  return point.matrixTransform(matrix.inverse());
+}
+
+function normalizedRect(start, end) {
+  return {
+    x: Math.min(start.x, end.x),
+    y: Math.min(start.y, end.y),
+    width: Math.abs(end.x - start.x),
+    height: Math.abs(end.y - start.y),
+  };
+}
+
+function updateSelectionRect(selectionRect, rect) {
+  selectionRect.style.display = "";
+  selectionRect.setAttribute("x", rect.x);
+  selectionRect.setAttribute("y", rect.y);
+  selectionRect.setAttribute("width", rect.width);
+  selectionRect.setAttribute("height", rect.height);
+}
+
+function rectsIntersect(left, right) {
+  return !(
+    left.x + left.width < right.x ||
+    right.x + right.width < left.x ||
+    left.y + left.height < right.y ||
+    right.y + right.height < left.y
+  );
+}
+
+function pointInRect(point, rect) {
+  return (
+    point.x >= rect.x &&
+    point.x <= rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y <= rect.y + rect.height
+  );
 }
 
 function toggleStroke(pathId, hitPath) {
