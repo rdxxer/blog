@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="KanjiVGの字形から部首に当たる画を選ぶ、漢検級別の部首クイズ。">
+  <title>漢検 部首クイズ</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <section id="home-screen" class="screen" aria-labelledby="home-title">
+      <header class="page-header">
+        <p class="eyebrow">KANJI RADICAL QUIZ</p>
+        <h1 id="home-title">漢検 部首クイズ</h1>
+        <p class="lead">級を選び、部首に当たる画をすべて選んでください。</p>
+      </header>
+
+      <div id="grade-grid" class="grade-grid" aria-label="級を選択"></div>
+
+      <p class="home-note">各級で新しく加わる漢字だけが出題されます。</p>
+    </section>
+
+    <section id="quiz-screen" class="screen" hidden aria-labelledby="quiz-grade">
+      <header class="quiz-header">
+        <button id="back-button" class="text-button" type="button">← 級選択</button>
+        <h1 id="quiz-grade" class="quiz-grade"></h1>
+        <p id="progress" class="progress" aria-live="polite"></p>
+      </header>
+
+      <div class="quiz-main">
+        <p class="instruction">部首に当たる画をクリック</p>
+
+        <div id="kanji-stage" class="kanji-stage" aria-live="polite">
+          <div id="loading" class="loading">読み込み中…</div>
+        </div>
+
+        <div id="answer-panel" class="answer-panel" hidden aria-live="polite">
+          <p id="judgement" class="judgement"></p>
+          <div class="radical-answer">
+            <span class="radical-label">部首字</span>
+            <strong id="radical-character" class="radical-character"></strong>
+          </div>
+          <p id="radical-strokes" class="radical-strokes"></p>
+        </div>
+
+        <button id="primary-button" class="primary-button" type="button">答えを見る</button>
+      </div>
+    </section>
+
+    <section id="result-screen" class="screen" hidden aria-labelledby="result-title">
+      <header class="page-header result-header">
+        <p id="result-grade" class="eyebrow"></p>
+        <h1 id="result-title">結果</h1>
+      </header>
+
+      <div class="score-card">
+        <strong id="accuracy" class="accuracy"></strong>
+        <p id="score-detail" class="score-detail"></p>
+      </div>
+
+      <section class="wrong-section" aria-labelledby="wrong-title">
+        <div class="section-heading">
+          <h2 id="wrong-title">間違えた漢字</h2>
+          <span id="wrong-count" class="wrong-count"></span>
+        </div>
+        <div id="wrong-list" class="wrong-list"></div>
+      </section>
+
+      <div class="result-actions">
+        <button id="retry-button" class="primary-button" type="button">同じ級をもう一度</button>
+        <button id="home-button" class="secondary-button" type="button">級を選び直す</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    KanjiVG © Ulrich Apel and contributors ·
+    <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noreferrer">CC BY-SA 3.0</a>
+  </footer>
+
+  <noscript>このページを利用するにはJavaScriptを有効にしてください。</noscript>
+</body>
+</html>
